@@ -25,10 +25,10 @@ simulation produces conditional predictions, not a diagnosis.
 
 This repository is in the research and architecture phase. A first host-side
 vertical slice now exists: a C++17 bench emits public observations separately
-from a hidden oracle, and a deterministic Python investigator proposes rival
-hypotheses while abstaining from diagnosing the vehicle. The full laboratory,
-OpenAI-backed investigator, QNX execution, and demonstration format remain
-open.
+from a hidden oracle, a Python harness invokes the investigator, and a sealed
+case file is produced while the system abstains from diagnosing the vehicle.
+The full laboratory, OpenAI-backed investigator, QNX execution, and
+demonstration format remain open.
 
 The current research basis is in
 [`docs/investigacion-inicial.md`](docs/investigacion-inicial.md). The proposed
@@ -125,6 +125,20 @@ The order follows construction dependencies and experimental risk:
 
 The detailed preliminary plan and acceptance questions are in
 [`docs/preliminary-levels.md`](docs/preliminary-levels.md).
+
+## Run the host vertical slice
+
+```bash
+cmake -S . -B build
+cmake --build build
+PYTHONPATH=python python3 -m unittest discover -s tests -v
+```
+
+The `ecu_bench` executable can be called by
+`recovery_witness.cli`. It writes public bench events to the harness and stores
+the hidden development oracle in a separate file. The generated case file is
+sealed with a versioned canonical serializer; the oracle is not passed to the
+investigator.
 
 ## Scope and boundaries
 
