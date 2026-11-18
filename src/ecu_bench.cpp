@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cctype>
 
 namespace {
 
@@ -20,7 +21,20 @@ struct Scenario {
 
 void print_usage() {
     std::cout << "Usage: ecu_bench --fault <power_drop|message_loss|recovery_incomplete> "
-                 "--oracle-file <path>\n";
+                 "--case-id <id> --run-id <id> --oracle-file <path>\n";
+}
+
+void validate_identifier(const std::string& value, const char* name) {
+    if (value.empty() || value.size() > 128) {
+        throw std::invalid_argument(std::string(name) + " must contain 1..128 characters");
+    }
+    for (unsigned char character : value) {
+        if (!std::isalnum(character) && character != '-' && character != '_' &&
+            character != '.') {
+            throw std::invalid_argument(
+                std::string(name) + " contains an unsupported character");
+        }
+    }
 }
 
 Scenario scenario_for(const std::string& fault) {
@@ -60,11 +74,14 @@ void write_oracle(const std::filesystem::path& path, const Scenario& scenario) {
            << "\"}\n";
 }
 
-void write_public_events(const Scenario& scenario) {
+void write_public_events(
+    const Scenario& scenario,
+    const std::string& case_id,
+    const std::string& run_id) {
     for (const Event& event : scenario.events) {
         std::cout << "{\"schema_version\":\"event.v1\","
-                     "\"case_id\":\"bench-case\","
-                     "\"run_id\":\"bench-run\","
+                     "\"case_id\":\"" << case_id << "\","
+                     "\"run_id\":\"" << run_id << "\","
                      "\"sequence\":" << event.sequence << ","
                      "\"source\":\"bench\","
                      "\"clock_domain\":\"simulated\","
@@ -81,15 +98,19 @@ int main(int argc, char** argv) {
             print_usage();
             return 0;
         }
-        if (argc != 5 || std::string(argv[1]) != "--fault" ||
-            std::string(argv[3]) != "--oracle-file") {
+        if (argc != 9 || std::string(argv[1]) != "--fault" ||
+            std::string(argv[3]) != "--case-id" ||
+            std::string(argv[5]) != "--run-id" ||
+            std::string(argv[7]) != "--oracle-file") {
             print_usage();
             return 2;
         }
 
         const Scenario scenario = scenario_for(argv[2]);
-        write_oracle(argv[4], scenario);
-        write_public_events(scenario);
+        validate_identifier(argv[4], "case-id");
+        validate_identifier(argv[6], "run-id");
+        write_oracle(argv[8], scenario);
+        write_public_events(scenario, argv[4], argv[6]);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "ecu_bench: " << error.what() << '\n';

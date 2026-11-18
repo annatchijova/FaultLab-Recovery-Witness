@@ -5,6 +5,16 @@ from recovery_witness.investigator import InvestigationInput, investigate
 
 
 class InvestigatorContractTests(unittest.TestCase):
+    def test_mechanic_observations_are_required(self):
+        case = InvestigationInput(
+            case_id="case-empty",
+            mechanic_observations=(),
+            bench_observations=(),
+        )
+
+        with self.assertRaises(ValueError):
+            investigate(case)
+
     def test_investigation_preserves_public_evidence_boundary(self):
         case = InvestigationInput(
             case_id="case-001",
@@ -50,6 +60,23 @@ class InvestigatorContractTests(unittest.TestCase):
                     "source": "bench",
                     "sequence": 1,
                     "fault": "power_drop",
+                },
+            ),
+        )
+
+        with self.assertRaises(ValueError):
+            investigate(case)
+
+    def test_nested_hidden_oracle_fields_are_rejected_at_the_boundary(self):
+        case = InvestigationInput(
+            case_id="case-nested",
+            mechanic_observations=("Module stops responding intermittently",),
+            bench_observations=(
+                {
+                    "event_type": "response_timeout",
+                    "source": "bench",
+                    "sequence": 1,
+                    "metadata": {"oracle": "power_drop"},
                 },
             ),
         )

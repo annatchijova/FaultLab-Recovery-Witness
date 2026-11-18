@@ -1,6 +1,12 @@
 import unittest
+from pathlib import Path
 
-from recovery_witness.harness import build_case_file, parse_public_events
+from recovery_witness.harness import (
+    build_case_file,
+    parse_public_events,
+    validate_artifact_paths,
+    verify_case_file,
+)
 
 
 class HarnessContractTests(unittest.TestCase):
@@ -42,6 +48,30 @@ class HarnessContractTests(unittest.TestCase):
         self.assertEqual(case_file["schema_version"], "sealed-case-file.v1")
         self.assertEqual(case_file["payload"], payload)
         self.assertEqual(len(case_file["sha256"]), 64)
+        self.assertTrue(verify_case_file(case_file))
+
+    def test_public_event_parser_rejects_nested_hidden_data_and_unknown_fields(self):
+        line = (
+            '{"schema_version":"event.v1","source":"bench",'
+            '"sequence":1,"event_type":"response_timeout",'
+            '"metadata":{"oracle":"secret"}}'
+        )
+        with self.assertRaises(ValueError):
+            parse_public_events(line)
+
+        line = (
+            '{"schema_version":"event.v1","source":"bench",'
+            '"sequence":1,"event_type":"response_timeout",'
+            '"unexpected":true}'
+        )
+        with self.assertRaises(ValueError):
+            parse_public_events(line)
+
+    def test_artifact_paths_must_not_collide(self):
+        with self.assertRaises(ValueError):
+            validate_artifact_paths(
+                path=Path("case.json"), oracle_file=Path("case.json")
+            )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,12 @@ import argparse
 import json
 from pathlib import Path
 
-from .harness import build_case_file, run_bench, write_case_file
+from .harness import (
+    build_case_file,
+    run_bench,
+    validate_artifact_paths,
+    write_case_file,
+)
 from .investigator import InvestigationInput, investigate
 
 
@@ -21,7 +26,14 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
-    public_events = run_bench(args.bench, args.fault, args.oracle_file)
+    validate_artifact_paths(path=args.output, oracle_file=args.oracle_file)
+    public_events = run_bench(
+        args.bench,
+        args.fault,
+        args.oracle_file,
+        case_id=args.case_id,
+        run_id=args.case_id,
+    )
     payload = investigate(
         InvestigationInput(
             case_id=args.case_id,

@@ -172,3 +172,7 @@ ECU/
 The next design question is the exact Level 1 case: its actors, evidence
 contract, investigation cycle, and proof that a requested experiment is
 actually discriminating.
+
+The first adversarial review of the host slice, including reproduced pre-fix
+failures and their remediations, is documented in
+docs/red-team-round-1.md.

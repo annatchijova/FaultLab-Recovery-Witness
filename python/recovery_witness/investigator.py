@@ -15,6 +15,17 @@ _MAX_TEXT_LENGTH = 2_000
 _HIDDEN_KEYS = frozenset({"fault", "injected_fault", "oracle", "oracle_truth"})
 
 
+def _contains_hidden_key(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            key in _HIDDEN_KEYS or _contains_hidden_key(child)
+            for key, child in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_hidden_key(child) for child in value)
+    return False
+
+
 @dataclass(frozen=True)
 class InvestigationInput:
     """Public inputs available to the investigator."""
@@ -39,6 +50,8 @@ def _validate_case(case: InvestigationInput) -> None:
 
     if not isinstance(case.mechanic_observations, tuple):
         raise ValueError("mechanic_observations must be a tuple")
+    if not case.mechanic_observations:
+        raise ValueError("at least one mechanic observation is required")
     for index, observation in enumerate(case.mechanic_observations):
         _require_text(observation, f"mechanic_observations[{index}]")
 
@@ -47,7 +60,7 @@ def _validate_case(case: InvestigationInput) -> None:
     for index, observation in enumerate(case.bench_observations):
         if not isinstance(observation, Mapping):
             raise ValueError(f"bench_observations[{index}] must be a mapping")
-        if _HIDDEN_KEYS.intersection(observation):
+        if _contains_hidden_key(observation):
             raise ValueError(
                 f"bench_observations[{index}] contains hidden oracle data"
             )
