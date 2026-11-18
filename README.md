@@ -20,6 +20,11 @@ state model, evidence criteria, verdict levels, and implementation boundaries
 have not been fixed yet. The goal of this README is to capture the working
 problem statement and the hypotheses that will guide that investigation.
 
+The current research basis is available in
+[`docs/investigacion-inicial.md`](docs/investigacion-inicial.md). It is a
+working research document, not a specification or a report of completed
+experiments.
+
 ## Why this problem matters
 
 Imagine a simulated ECU receiving a configuration update. An unexpected reboot
@@ -32,22 +37,29 @@ as recovery of the device state.
 
 Recovery Witness is intended to make that distinction explicit and testable.
 
-## What the project is intended to investigate
+This is not intended to be another OTA update installer. Existing update and
+rollback systems address important parts of reliable deployment. Recovery
+Witness focuses on the complementary question: after an interrupted operation,
+what state can be reconstructed, and what evidence is strong enough to support
+or withhold a conclusion?
 
-The prototype is expected to explore:
+## Research direction
+
+The investigation is expected to explore:
 
 - persistent transition records with verifiable integrity;
 - controlled fault injection at different points in an operation;
 - state reconstruction after restart;
-- reproducible observations and explicit abstention when the evidence is
-  insufficient;
-- temporal measurements on QNX 8.0, including evidence from `tracelogger` and
-  `TraceEvent()` where available;
-- a simulated device that provides observations independent of the operation's
-  own journal.
+- independent observations from a simulated device, rather than relying only
+  on the operation's own journal;
+- reproducible experiments that can distinguish competing explanations;
+- temporal evidence from QNX 8.0, including `tracelogger` and `TraceEvent()`
+  where available;
+- explicit abstention when the evidence is insufficient.
 
-The final criteria are deliberately not specified yet. They should be derived
-from experiments rather than chosen only because they make the demo convenient.
+The final state model, criteria, and decision levels are deliberately not
+specified yet. They should be derived from experiments rather than chosen only
+because they make a demo convenient.
 
 ## Demonstration hypothesis
 
@@ -90,61 +102,77 @@ to investigation planning and evidence analysis through controlled interfaces.
 Any future operational decision must be grounded in an explicit, auditable
 evidence policy rather than in the model's narrative confidence.
 
-## Planned architecture
+## QNX and the evidence model
+
+QNX is part of the research question, not just a deployment label. A QNX-based
+prototype could provide application evidence alongside kernel and runtime trace
+evidence. The two sources may be correlated, but they should not be treated as
+the same observation automatically.
+
+This matters because a filesystem can be internally consistent while the
+higher-level ECU transaction is not. A persisted payload, a journal entry, and
+a successful reboot may all be real observations without proving that the
+intended state transition completed.
+
+## Exploratory architecture
 
 ```text
-QNX 8.0 simulated ECU
-  operations, restarts, persisted state, and temporal traces
-                    |
-                    v
-Evidence and experimentation layer
-  reproducible observations, invariants, and fault injection
-                    |
-          +---------+---------+
-          |                   |
-          v                   v
-OpenAI Responses API     Experimental ML
-hypotheses, tool use,    anomaly and temporal-pattern
-test selection, analysis discovery
+                    QNX 8.0 environment
+  simulated ECU + fault injection + application and kernel traces
+                              |
+                              v
+                  Evidence and experiment layer
+              reconstruction, invariants, controlled tests
+                         /                    \
+                        /                      \
+                       v                        v
+             LLM investigator             Experimental ML
+          hypotheses and test choice     temporal patterns and anomalies
 ```
 
-The OpenAI Responses API is a candidate integration point for structured tool
-use and investigator outputs. QNX tracing is a candidate source of temporal
-evidence beyond simulator-generated logs.
+The OpenAI Responses API is one candidate integration point for structured tool
+use and investigator outputs. The exact interface is still open. The important
+boundary is that the agent can request observations and experiments through
+controlled tools, but cannot write configuration to an ECU.
 
-## ML research direction
+## ML as an open research question
 
 ML is an experimental research line, not yet a promised classifier or safety
-decision-maker. Two initial directions are under consideration:
+decision-maker. The question is whether learned methods can reveal temporal or
+state-transition patterns that a reasonable set of explicit invariants does not
+cover, especially when the failure mechanism differs from the examples already
+studied.
 
-### Anomaly detection
+Possible directions include anomaly detection and transition-pattern discovery,
+but no dataset, model family, feature representation, or training regime is
+chosen yet. Those choices belong after the evidence model and first fault
+campaign have been investigated.
 
-Train or fit a model on normal executions and evaluate whether it identifies
-temporal sequences that become anomalous after injected interruptions.
+The evaluation must be able to show that ML adds no value. A deterministic rule,
+a statistical baseline, or an explicit abstention may be the correct result. Any
+claim of discovering a new failure mode would require a separate evaluation
+scenario and a reproducible experiment; recognizing a memorized demonstration
+case would not count.
 
-### Transition-pattern discovery
+External automotive and time-series datasets may be useful as methodological
+references or transfer tests, but they are not being selected here as training
+data. The recovery-specific evidence should come from controlled experiments
+whose failure mechanism and ground truth are known independently of the model.
 
-Study whether a model can identify combinations of states and events associated
-with inconsistent recovery, including cases that do not match the known failure
-examples.
+## Working evidence vocabulary
 
-Any claim that ML discovered a new failure mode will require a separate
-evaluation set, adversarial cases, and a reproducible experiment. Memorizing the
-three demonstration scenarios will not count as discovery.
+The investigation currently separates four kinds of statements:
 
-## Design boundary under investigation
-
-The project will distinguish at least these categories during research:
-
-| Category | Meaning in the investigation |
+| Category | Meaning |
 | --- | --- |
 | Observation | Evidence obtained from the simulator, trace, journal, or controlled experiment |
 | Hypothesis | A possible explanation proposed by the investigator |
 | Test | A reproducible action intended to distinguish hypotheses |
 | Conclusion | A bounded statement supported by the collected evidence |
 
-The names and final decision levels are intentionally left open until the
-evidence model and experiments have been studied.
+Keeping these categories separate is central to the project. A model-generated
+hypothesis is not an observation, and a successful restart is not by itself a
+conclusion about the recovered device state.
 
 ## Scope decisions
 
@@ -152,8 +180,7 @@ evidence model and experiments have been studied.
 - The prototype targets a simulated ECU before any claim about real hardware.
 - The LLM may investigate and request observations through controlled tools, but
   it may not write ECU configuration.
-- ML is exploratory and must earn any discovery claim through held-out,
-  reproducible evaluation.
+- ML remains exploratory; its data, model, and evaluation design are still open.
 - No production-safety or real-device guarantee is claimed by this provisional
   repository.
 
@@ -163,7 +190,8 @@ evidence model and experiments have been studied.
 ECU/
 ├── LICENSE       # MIT license
 ├── README.md     # provisional project statement
-├── skills/       # engineering and research skills used during development
+├── docs/         # research material and future technical design documents
+├── skills/       # machine-learning research skills
 └── .venv/        # local development environment, ignored by Git
 ```
 
