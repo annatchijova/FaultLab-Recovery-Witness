@@ -35,6 +35,7 @@ who already controls the host, the executable, or the output directory.
 | RW-003 | Medium | CONFIRMED BY INDUCTION | Evidence boundary | Unknown fields and nested hidden-oracle data crossed the parser. |
 | RW-004 | Low | CONFIRMED BY INDUCTION | Input contract | Empty mechanic evidence still produced an investigation case. |
 | RW-005 | Low | CODE FACT | Native bench JSON | Caller-controlled identifiers were interpolated into JSON without a safe alphabet. |
+| RW-006 | Informational | CODE FACT | Chain of custody | Individual case seals do not yet form an append-only chain across events or runs. |
 
 The fixes are now present on the working tree and covered by regression tests.
 
@@ -104,6 +105,30 @@ The fixes are now present on the working tree and covered by regression tests.
 - **Induction:** A quote-containing identifier was rejected by the new validator.
 - **Fix:** Case and run identifiers must be 1–128 characters from [A-Za-z0-9._-].
 
+### RW-006 — Individual seals are not yet a custody chain
+
+**Bucket:** architectural limitation
+**Severity:** Informational
+**Epistemic level:** Code fact.
+
+- **Observation:** A case file contains a deterministic SHA-256 seal over its
+  payload, but public events have no previous-event hash and separate runs have
+  no predecessor reference.
+- **Expected context:** A per-artifact seal detects modification of that
+  artifact. It does not prove that an event was not omitted, reordered, or
+  inserted between two independently sealed artifacts.
+- **Abduction:** Treating the current seal as a complete chain of custody would
+  overstate the evidence guarantee.
+- **Deduction:** Reordering or deleting complete event records could remain
+  undetectable unless the event sequence and its surrounding artifact are
+  sealed together.
+- **Induction:** Source inspection confirms there is no prev_hash, genesis
+  record, or independent chain verifier in the current slice.
+- **Disposition:** Documented, not patched in this round. A future evidence
+  contract should add a single genesis, stored previous hash, a content hash for
+  each referenced artifact, and an independent verifier that reports linkage
+  and payload integrity separately.
+
 ## Discarded or already-refuted vectors
 
 | Vector | Result | Evidence |
@@ -113,6 +138,7 @@ The fixes are now present on the working tree and covered by regression tests.
 | Reordering dictionary keys changes a seal | FALSIFIED for current code | Existing canonicalization test observes equal seals. |
 | LLM changes the current verdict | Not applicable to this slice | No OpenAI backend exists yet; the local investigator emits a fixed abstention. |
 | QNX timing or IPC claims | Not tested | QNX is outside this host-only round. |
+| Backup or restore guarantees | Not applicable | This slice does not create or restore backups. |
 
 ## Remediation verification
 
@@ -129,4 +155,5 @@ Unsafe native identifier probe: rejected with exit code 1
 
 The current implementation is still a research vertical slice. This report
 does not establish production security, QNX equivalence, or correctness of a
-future model-backed investigator.
+future model-backed investigator. In particular, the current seal is an
+artifact-integrity check, not yet an append-only custody chain.
