@@ -23,9 +23,12 @@ simulation produces conditional predictions, not a diagnosis.
 
 ## Project status
 
-This repository is in the research and architecture phase. The system is not
-implemented yet, and the final experiment, evidence schema, and demonstration
-format remain open.
+This repository is in the research and architecture phase. A first host-side
+vertical slice now exists: a C++17 bench emits public observations separately
+from a hidden oracle, and a deterministic Python investigator proposes rival
+hypotheses while abstaining from diagnosing the vehicle. The full laboratory,
+OpenAI-backed investigator, QNX execution, and demonstration format remain
+open.
 
 The current research basis is in
 [`docs/investigacion-inicial.md`](docs/investigacion-inicial.md). The proposed
@@ -142,8 +145,12 @@ The detailed preliminary plan and acceptance questions are in
 ```text
 ECU/
 ├── LICENSE       # MIT license
+├── CMakeLists.txt # C++17 build and smoke-test configuration
 ├── README.md     # project scope and current framing
 ├── docs/         # research, decisions, and preliminary design
+├── src/          # C++17 host bench and future QNX adapters
+├── python/       # host-side investigator and case-file primitives
+├── tests/        # contract and determinism tests
 ├── skills/       # machine-learning research skills
 └── .venv/        # local development environment, ignored by Git
 ```
