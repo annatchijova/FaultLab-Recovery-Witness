@@ -1,199 +1,153 @@
-# ECU Recovery Witness
+# Recovery Witness
 
-**A recovery auditor for interrupted electronic-control-unit operations.**
+**An automotive electronic-fault investigation laboratory.**
 
-ECU Recovery Witness investigates what can be demonstrated about an ECU's state
-after a configuration operation is interrupted by a reboot, lost communication,
-or power failure.
+When a vehicle has an intermittent communication failure, a restart problem, a
+power symptom, or a module that sometimes stops responding, the mechanic has
+observations but not always a decisive explanation. Diagnostic trouble codes,
+freeze frames, scanner reports, measurements, history, and previous test
+results may support several competing hypotheses.
 
-The central question is not whether the process started again. It is whether the
-post-recovery state is coherent and whether the available evidence is sufficient
-to continue safely.
+Recovery Witness is intended to help investigate those cases. A mechanic
+provides observations from the real vehicle. An AI investigator organizes the
+evidence, proposes rival explanations, predicts what each mechanism would look
+like, and requests controlled experiments. A QNX-based laboratory runs those
+experiments on virtual ECUs and reports which observations would distinguish the
+hypotheses.
 
-> An interrupted operation is not successful merely because the process ran
-> again after a restart.
+The laboratory does not know the internal state of the mechanic's vehicle. Its
+simulation produces conditional predictions, not a diagnosis.
+
+> QNX helps design discriminating tests. It does not manufacture evidence about
+> the real vehicle.
 
 ## Project status
 
-This repository is in the investigation and architecture phase. The definitive
-state model, evidence criteria, verdict levels, and implementation boundaries
-have not been fixed yet. The goal of this README is to capture the working
-problem statement and the hypotheses that will guide that investigation.
+This repository is in the research and architecture phase. The system is not
+implemented yet, and the final experiment, evidence schema, and demonstration
+format remain open.
 
-The current research basis is available in
-[`docs/investigacion-inicial.md`](docs/investigacion-inicial.md). It is a
-working research document, not a specification or a report of completed
-experiments.
+The current research basis is in
+[`docs/investigacion-inicial.md`](docs/investigacion-inicial.md). The proposed
+construction sequence is in
+[`docs/preliminary-levels.md`](docs/preliminary-levels.md). The earlier,
+more ambitious recovery-auditor proposal is preserved as a deferred direction
+in [`docs/deferred-real-vehicle-proposal.md`](docs/deferred-real-vehicle-proposal.md).
 
-## Why this problem matters
+## The problem
 
-Imagine a simulated ECU receiving a configuration update. An unexpected reboot
-occurs in the middle of the operation.
+Suppose a mechanic receives a vehicle with intermittent loss of communication
+with a module. The scanner reports communication codes, and the customer says
+the failure appears occasionally during startup.
 
-When the system starts again, it finds a record saying that the operation began.
-That record does not prove that the operation finished, that persisted data is
-intact, or that it is safe to continue. Recovery of the process is not the same
-as recovery of the device state.
+Several explanations may fit the initial evidence:
 
-Recovery Witness is intended to make that distinction explicit and testable.
+| Hypothesis | Controlled laboratory experiment | What it may clarify |
+| --- | --- | --- |
+| Module power drop | Restart a virtual ECU during a diagnostic exchange | The pattern of disconnection, initialization, and recovery associated with a restart |
+| Communication loss | Introduce transport timeouts and message loss | The pattern of missing communication without ECU reinitialization |
+| Recovery or persistence defect | Interrupt a persistent transition and execute recovery | The signals that distinguish a healthy restart from incomplete recovery |
 
-This is not intended to be another OTA update installer. Existing update and
-rollback systems address important parts of reliable deployment. Recovery
-Witness focuses on the complementary question: after an interrupted operation,
-what state can be reconstructed, and what evidence is strong enough to support
-or withhold a conclusion?
+If the first experiment produces initialization after an interruption and the
+second produces timeouts without initialization, the agent has a better question
+to ask. It still has not proved which mechanism occurred in the real vehicle.
 
-## Research direction
+The next step may be to recommend checking power and ground under the failure
+conditions, observing communication recovery, or capturing additional timing
+data according to the vehicle and the mechanic's procedures. The mechanic
+decides which measurements are relevant and safe. Those real observations can
+feed the next investigation round.
 
-The investigation is expected to explore:
-
-- persistent transition records with verifiable integrity;
-- controlled fault injection at different points in an operation;
-- state reconstruction after restart;
-- independent observations from a simulated device, rather than relying only
-  on the operation's own journal;
-- reproducible experiments that can distinguish competing explanations;
-- temporal evidence from QNX 8.0, including `tracelogger` and `TraceEvent()`
-  where available;
-- explicit abstention when the evidence is insufficient.
-
-The final state model, criteria, and decision levels are deliberately not
-specified yet. They should be derived from experiments rather than chosen only
-because they make a demo convenient.
-
-## Demonstration hypothesis
-
-Run the same configuration operation three times and interrupt it at different
-points:
-
-1. the operation never reaches confirmation;
-2. data persists, but confirmation is missing;
-3. the final device state and the independent evidence agree.
-
-The system should distinguish these situations without inventing missing facts
-and without treating a successful restart as proof of a successful recovery.
-
-This experiment is a target for the prototype, not a claim that the repository
-already implements it.
-
-## An AI investigator, not an ECU writer
-
-The project is being reframed around an active investigation agent. The LLM is
-intended to formulate competing hypotheses about an interrupted recovery, select
-the next useful observation, and request controlled experiments against the
-simulated ECU.
-
-For example, given an incomplete temporal sequence, a journal entry claiming
-that a write finished, and a persisted state that differs from the expected
-configuration, the investigator might consider:
-
-- a partial write;
-- a premature confirmation;
-- an out-of-order persisted record;
-- incomplete recovery; or
-- data corruption.
-
-These are hypotheses, not observations. The agent must seek discriminating
-evidence and preserve the difference between what the model proposes and what
-the experiment verifies.
-
-The LLM will not write configuration data to a real ECU. Its authority is limited
-to investigation planning and evidence analysis through controlled interfaces.
-Any future operational decision must be grounded in an explicit, auditable
-evidence policy rather than in the model's narrative confidence.
-
-## QNX and the evidence model
-
-QNX is part of the research question, not just a deployment label. A QNX-based
-prototype could provide application evidence alongside kernel and runtime trace
-evidence. The two sources may be correlated, but they should not be treated as
-the same observation automatically.
-
-This matters because a filesystem can be internally consistent while the
-higher-level ECU transaction is not. A persisted payload, a journal entry, and
-a successful reboot may all be real observations without proving that the
-intended state transition completed.
-
-## Exploratory architecture
+## Intended architecture
 
 ```text
-                    QNX 8.0 environment
-  simulated ECU + fault injection + application and kernel traces
+Mechanic and real vehicle
+  symptoms, DTCs, scanner reports, freeze frames, measurements, history
                               |
                               v
-                  Evidence and experiment layer
-              reconstruction, invariants, controlled tests
-                         /                    \
-                        /                      \
-                       v                        v
-             LLM investigator             Experimental ML
-          hypotheses and test choice     temporal patterns and anomalies
+AI investigator via OpenAI API
+  evidence organization, rival hypotheses, predictions, test requests
+                              |
+                              v
+QNX 8.0 experimental bench on QEMU
+  virtual ECUs, fault injection, persistence, IPC, runtime traces
+                              |
+                              v
+Forensic case file and diagnostic plan
+  compatible hypotheses, refuted model mechanisms, recommended observations,
+  uncertainty, provenance, and a possible PDF presentation
 ```
 
-The OpenAI Responses API is one candidate integration point for structured tool
-use and investigator outputs. The exact interface is still open. The important
-boundary is that the agent can request observations and experiments through
-controlled tools, but cannot write configuration to an ECU.
+The experimental bench has its own oracle: it knows which mechanism was
+injected and what actually happened inside the bench. That oracle evaluates the
+experiment; it does not become evidence about the real vehicle.
 
-## ML as an open research question
+## Why QNX belongs in the laboratory
 
-ML is an experimental research line, not yet a promised classifier or safety
-decision-maker. The question is whether learned methods can reveal temporal or
-state-transition patterns that a reasonable set of explicit invariants does not
-cover, especially when the failure mechanism differs from the examples already
-studied.
+Python could model abstract state transitions and generate hypothetical traces.
+QNX adds a different experimental surface: native processes, inter-process
+communication, persistence behavior, interruptions, runtime timing, user trace
+events, and kernel instrumentation.
 
-Possible directions include anomaly detection and transition-pattern discovery,
-but no dataset, model family, feature representation, or training regime is
-chosen yet. Those choices belong after the evidence model and first fault
-campaign have been investigated.
+The QNX environment is therefore a test bench, not a digital twin of a vehicle
+and not a claim that QEMU reproduces a physical CAN bus, electrical noise, power
+behavior, or a commercial ECU. Validated hardware or models would be required
+for those claims.
 
-The evaluation must be able to show that ML adds no value. A deterministic rule,
-a statistical baseline, or an explicit abstention may be the correct result. Any
-claim of discovering a new failure mode would require a separate evaluation
-scenario and a reproducible experiment; recognizing a memorized demonstration
-case would not count.
+The proposed implementation split is:
 
-External automotive and time-series datasets may be useful as methodological
-references or transfer tests, but they are not being selected here as training
-data. The recovery-specific evidence should come from controlled experiments
-whose failure mechanism and ground truth are known independently of the model.
+- **C++17:** portable native bench, virtual ECU components, fault injector,
+  witness, reconstruction, invariants, and platform adapters;
+- **Python:** investigator agent, OpenAI API integration, experiment planning,
+  case-file orchestration, and provisional frontend;
+- **QNX 8.0:** target runtime for native bench components at the QNX level.
 
-## Working evidence vocabulary
+This is a proposed allocation. Toolchain compatibility and the exact boundary
+between host and QNX components still need to be verified.
 
-The investigation currently separates four kinds of statements:
+## Preliminary construction levels
 
-| Category | Meaning |
-| --- | --- |
-| Observation | Evidence obtained from the simulator, trace, journal, or controlled experiment |
-| Hypothesis | A possible explanation proposed by the investigator |
-| Test | A reproducible action intended to distinguish hypotheses |
-| Conclusion | A bounded statement supported by the collected evidence |
+The order follows construction dependencies and experimental risk:
 
-Keeping these categories separate is central to the project. A model-generated
-hypothesis is not an observation, and a successful restart is not by itself a
-conclusion about the recovered device state.
+1. **End-to-end laboratory:** a mechanic-facing case input, agent, host harness,
+   witness, human review, reproducible evidence, and report artifact.
+2. **Early ML experiment:** an optional signal evaluated against rules and
+   simpler baselines, with a real option to discard it.
+3. **QNX bench:** native experimental components and runtime traces on QNX 8.0.
+4. **Contrastive investigation:** the agent compares real observations with
+   predictions from rival mechanisms and requests measurements that discriminate
+   between them.
+5. **Autonomous discovery:** the agent explores the bench for previously
+   withheld defects and produces a reproduction checked by an independent oracle.
 
-## Scope decisions
+The detailed preliminary plan and acceptance questions are in
+[`docs/preliminary-levels.md`](docs/preliminary-levels.md).
 
-- Go is not a project requirement at this stage.
-- The prototype targets a simulated ECU before any claim about real hardware.
-- The LLM may investigate and request observations through controlled tools, but
-  it may not write ECU configuration.
-- ML remains exploratory; its data, model, and evaluation design are still open.
-- No production-safety or real-device guarantee is claimed by this provisional
-  repository.
+## Scope and boundaries
+
+- The initial domain is electronic, communication, power, restart, and module
+  recovery behavior.
+- The system does not diagnose arbitrary mechanical failures.
+- QNX experiments produce predictions conditioned on the laboratory model.
+- The system must distinguish real-vehicle evidence from simulated evidence.
+- The mechanic remains responsible for selecting and safely performing vehicle
+  measurements.
+- The agent cannot write configuration to a real ECU.
+- ML is optional and may be rejected if it does not add evidence beyond simpler
+  methods.
+- No production-safety, vehicle-safety, or real-device guarantee is claimed.
 
 ## Repository contents
 
 ```text
 ECU/
 ├── LICENSE       # MIT license
-├── README.md     # provisional project statement
-├── docs/         # research material and future technical design documents
+├── README.md     # project scope and current framing
+├── docs/         # research, decisions, and preliminary design
 ├── skills/       # machine-learning research skills
 └── .venv/        # local development environment, ignored by Git
 ```
 
-Implementation, experiments, tests, and technical design documents will be
-added after the investigation establishes the state model and evidence criteria.
+The next design question is the exact Level 1 case: its actors, evidence
+contract, investigation cycle, and proof that a requested experiment is
+actually discriminating.
