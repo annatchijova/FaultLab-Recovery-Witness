@@ -126,8 +126,8 @@ The fixes are now present on the working tree and covered by regression tests.
   linkage while preserving the separate integrity result.
 - **Disposition:** Event-level linkage is fixed. A future evidence contract
   should chain complete runs, include content hashes for referenced artifacts,
-  and move verification into an independent standard-library tool that reports
-  linkage and payload integrity separately.
+  while the new independent standard-library verifier now reports linkage and
+  payload integrity separately.
 
 ## Discarded or already-refuted vectors
 
@@ -149,6 +149,8 @@ The following checks were run after the fixes:
 CTest: 1/1 passed
 Host end-to-end CLI: produced sealed-case-file.v1, a 64-character SHA-256 seal,
 and a separate oracle artifact
+Independent verifier: accepted the generated case file
+Independent verifier after payload mutation: rejected the case file
 Collision probe: rejected with exit code 1
 Unsafe native identifier probe: rejected with exit code 1
 ~~~

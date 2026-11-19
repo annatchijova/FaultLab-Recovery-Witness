@@ -143,6 +143,11 @@ Public bench events are linked with a genesis-based hash chain inside the case
 file. This protects event ordering and tampering within one received run; it
 does not yet provide cross-run custody or authenticate the bench executable.
 
+An independently implemented verifier checks a generated case file without
+importing the producer package:
+
+    python3 tools/verify_case.py path/to/case.json
+
 ## Scope and boundaries
 
 - The initial domain is electronic, communication, power, restart, and module
