@@ -139,6 +139,9 @@ The `ecu_bench` executable can be called by
 the hidden development oracle in a separate file. The generated case file is
 sealed with a versioned canonical serializer; the oracle is not passed to the
 investigator.
+Public bench events are linked with a genesis-based hash chain inside the case
+file. This protects event ordering and tampering within one received run; it
+does not yet provide cross-run custody or authenticate the bench executable.
 
 ## Scope and boundaries
 

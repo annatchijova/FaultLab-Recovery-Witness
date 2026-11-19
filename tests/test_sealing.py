@@ -1,6 +1,11 @@
 import unittest
 
-from recovery_witness.sealing import canonical_bytes, seal
+from recovery_witness.sealing import (
+    canonical_bytes,
+    chain_events,
+    seal,
+    verify_event_chain,
+)
 
 
 class SealingTests(unittest.TestCase):
@@ -24,6 +29,23 @@ class SealingTests(unittest.TestCase):
             seal({"decision": "ABSTAIN"}),
             seal({"decision": "SUPPORTED"}),
         )
+
+    def test_event_chain_detects_reordering(self):
+        events = chain_events(
+            [
+                {"sequence": 1, "event_type": "start"},
+                {"sequence": 2, "event_type": "stop"},
+            ]
+        )
+
+        report = verify_event_chain(events)
+        self.assertTrue(report["linkage_ok"])
+        self.assertTrue(report["integrity_ok"])
+
+        reordered = [events[1], events[0]]
+        report = verify_event_chain(reordered)
+        self.assertFalse(report["linkage_ok"])
+        self.assertTrue(report["integrity_ok"])
 
 
 if __name__ == "__main__":

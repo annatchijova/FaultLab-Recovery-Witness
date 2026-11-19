@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
-from .sealing import CANONICALIZE_VERSION, seal
+from .sealing import CANONICALIZE_VERSION, chain_events, seal
 
 
 _HIDDEN_KEYS = frozenset({"fault", "injected_fault", "oracle", "oracle_truth"})
@@ -120,7 +120,7 @@ def run_bench(
         )
     if not oracle_file.is_file():
         raise RuntimeError("bench did not create its separate oracle artifact")
-    return parse_public_events(completed.stdout)
+    return tuple(chain_events(list(parse_public_events(completed.stdout))))
 
 
 def build_case_file(payload: Mapping[str, Any]) -> dict[str, Any]:

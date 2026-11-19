@@ -6,6 +6,7 @@ from typing import Any
 
 
 CANONICALIZE_VERSION = "canonical-json.v1"
+GENESIS_HASH = "0" * 64
 
 
 def _typed(value: Any) -> dict[str, Any]:
@@ -55,3 +56,59 @@ def seal(payload: dict[str, Any]) -> str:
     """Return a SHA-256 digest over the canonical payload bytes."""
 
     return hashlib.sha256(canonical_bytes(payload)).hexdigest()
+
+
+def _event_digest(event: dict[str, Any], previous_hash: str) -> str:
+    return seal({"event": event, "prev_hash": previous_hash})
+
+
+def chain_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Attach a genesis-linked, deterministic hash chain to public events."""
+
+    chained: list[dict[str, Any]] = []
+    previous_hash = GENESIS_HASH
+    for event in events:
+        if not isinstance(event, dict):
+            raise TypeError("event chain entries must be dictionaries")
+        chained_event = dict(event)
+        chained_event["prev_hash"] = previous_hash
+        chained_event["event_hash"] = _event_digest(event, previous_hash)
+        chained.append(chained_event)
+        previous_hash = chained_event["event_hash"]
+    return chained
+
+
+def verify_event_chain(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Independently report linkage and payload integrity for an event chain."""
+
+    linkage_ok = True
+    integrity_ok = True
+    issues: list[str] = []
+    previous_hash = GENESIS_HASH
+    for index, event in enumerate(events):
+        if not isinstance(event, dict):
+            integrity_ok = False
+            issues.append(f"entry {index} is not an object")
+            continue
+        stored_previous = event.get("prev_hash")
+        stored_digest = event.get("event_hash")
+        if stored_previous != previous_hash:
+            linkage_ok = False
+            issues.append(f"entry {index} has an invalid prev_hash")
+        content = {
+            key: value
+            for key, value in event.items()
+            if key not in {"prev_hash", "event_hash"}
+        }
+        if stored_digest != _event_digest(content, stored_previous):
+            integrity_ok = False
+            issues.append(f"entry {index} has an invalid event_hash")
+        if isinstance(stored_digest, str):
+            previous_hash = stored_digest
+        else:
+            previous_hash = ""
+    return {
+        "linkage_ok": linkage_ok,
+        "integrity_ok": integrity_ok,
+        "issues": issues,
+    }

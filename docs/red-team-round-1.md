@@ -35,7 +35,7 @@ who already controls the host, the executable, or the output directory.
 | RW-003 | Medium | CONFIRMED BY INDUCTION | Evidence boundary | Unknown fields and nested hidden-oracle data crossed the parser. |
 | RW-004 | Low | CONFIRMED BY INDUCTION | Input contract | Empty mechanic evidence still produced an investigation case. |
 | RW-005 | Low | CODE FACT | Native bench JSON | Caller-controlled identifiers were interpolated into JSON without a safe alphabet. |
-| RW-006 | Informational | CODE FACT | Chain of custody | Individual case seals do not yet form an append-only chain across events or runs. |
+| RW-006 | Informational | CODE FACT | Chain of custody | Event-level linkage is now present, but complete runs do not yet form an append-only chain. |
 
 The fixes are now present on the working tree and covered by regression tests.
 
@@ -112,22 +112,22 @@ The fixes are now present on the working tree and covered by regression tests.
 **Epistemic level:** Code fact.
 
 - **Observation:** A case file contains a deterministic SHA-256 seal over its
-  payload, but public events have no previous-event hash and separate runs have
-  no predecessor reference.
+  payload and public events now carry genesis-linked hashes. Separate runs still
+  have no predecessor reference, and the verifier remains in the producer
+  package.
 - **Expected context:** A per-artifact seal detects modification of that
   artifact. It does not prove that an event was not omitted, reordered, or
   inserted between two independently sealed artifacts.
 - **Abduction:** Treating the current seal as a complete chain of custody would
   overstate the evidence guarantee.
-- **Deduction:** Reordering or deleting complete event records could remain
-  undetectable unless the event sequence and its surrounding artifact are
-  sealed together.
-- **Induction:** Source inspection confirms there is no prev_hash, genesis
-  record, or independent chain verifier in the current slice.
-- **Disposition:** Documented, not patched in this round. A future evidence
-  contract should add a single genesis, stored previous hash, a content hash for
-  each referenced artifact, and an independent verifier that reports linkage
-  and payload integrity separately.
+- **Deduction:** Reordering or deleting complete event records should now break
+  event linkage, while reordering complete runs could remain undetectable.
+- **Induction:** The new regression test confirms event reordering breaks
+  linkage while preserving the separate integrity result.
+- **Disposition:** Event-level linkage is fixed. A future evidence contract
+  should chain complete runs, include content hashes for referenced artifacts,
+  and move verification into an independent standard-library tool that reports
+  linkage and payload integrity separately.
 
 ## Discarded or already-refuted vectors
 
@@ -155,5 +155,5 @@ Unsafe native identifier probe: rejected with exit code 1
 
 The current implementation is still a research vertical slice. This report
 does not establish production security, QNX equivalence, or correctness of a
-future model-backed investigator. In particular, the current seal is an
-artifact-integrity check, not yet an append-only custody chain.
+future model-backed investigator. Event-level chaining is present, but complete
+run-level custody and independent verification remain future work.

@@ -105,14 +105,7 @@ def investigate(case: InvestigationInput) -> dict[str, Any]:
         {"source": "mechanic", "text": text}
         for text in case.mechanic_observations
     ]
-    observations.extend(
-        {
-            "source": "bench",
-            "event_type": item["event_type"],
-            "sequence": item["sequence"],
-        }
-        for item in case.bench_observations
-    )
+    observations.extend(dict(item) for item in case.bench_observations)
 
     return {
         "schema_version": SCHEMA_VERSION,
