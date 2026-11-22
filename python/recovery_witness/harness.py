@@ -120,7 +120,10 @@ def run_bench(
         )
     if not oracle_file.is_file():
         raise RuntimeError("bench did not create its separate oracle artifact")
-    return tuple(chain_events(list(parse_public_events(completed.stdout))))
+    events = parse_public_events(completed.stdout)
+    if any(event.get("case_id") != case_id or event.get("run_id") != run_id for event in events):
+        raise ValueError("Public event identity differs from the requested bench run")
+    return tuple(chain_events(list(events)))
 
 
 def build_case_file(payload: Mapping[str, Any]) -> dict[str, Any]:

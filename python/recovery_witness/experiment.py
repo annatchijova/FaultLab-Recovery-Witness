@@ -35,7 +35,18 @@ def assess(events, case_id):
         if not candidates:
             break
     match = next((label for label in candidates if len(events) == len(SIGNATURES[label])), None)
+    probe = None
+    if candidates and match is None:
+        # Request the earliest unobserved position that separates live predictions.
+        start = len(events)
+        limit = min(len(SIGNATURES[label]) for label in candidates)
+        for index in range(start, limit):
+            predictions = {label: SIGNATURES[label][index] for label in candidates}
+            if len(set(predictions.values())) > 1 or len(candidates) == 1:
+                probe = {"sequence": index + 1, "predictions": predictions}
+                break
     return {
+        "next_bench_probe": probe,
         "schema_version": "host-signature-assessment.v1",
         "scope": "Ordered public events from one simulated host fixture",
         "requested_experiment": "Capture an ordered diagnostic exchange through restart, transport recovery or readiness.",
