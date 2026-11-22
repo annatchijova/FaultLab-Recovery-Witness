@@ -5,6 +5,8 @@ developed. An OpenAI-backed investigator can be added behind the same boundary;
 it must not receive hidden bench-oracle fields or emit a vehicle diagnosis.
 """
 
+from .experiment import assess
+
 from dataclasses import dataclass
 from typing import Any, Mapping
 
@@ -101,6 +103,7 @@ def investigate(case: InvestigationInput) -> dict[str, Any]:
     """
 
     _validate_case(case)
+    assessment, question = assess(case.bench_observations, case.case_id)
     observations: list[dict[str, Any]] = [
         {"source": "mechanic", "text": text}
         for text in case.mechanic_observations
@@ -112,7 +115,8 @@ def investigate(case: InvestigationInput) -> dict[str, Any]:
         "case_id": case.case_id,
         "observations": observations,
         "hypotheses": _hypotheses(),
-        "next_observation": "Check whether module initialization occurs during the communication failure.",
+        "bench_assessment": assessment,
+        "next_observation": question,
         "decision": "ABSTAIN",
         "decision_scope": "The laboratory plan does not establish what happened in the real vehicle.",
     }
