@@ -21,7 +21,7 @@ struct Scenario {
 
 void print_usage() {
     std::cout << "Usage: ecu_bench --fault <power_drop|message_loss|recovery_incomplete> "
-                 "--case-id <id> --run-id <id> --oracle-file <path>\n";
+                 "--case-id <id> --run-id <id> --oracle-file <path> [--interactive]\n";
 }
 
 void validate_identifier(const std::string& value, const char* name) {
@@ -74,11 +74,19 @@ void write_oracle(const std::filesystem::path& path, const Scenario& scenario) {
            << "\"}\n";
 }
 
+void await_request() {
+    std::string command;
+    if (!std::getline(std::cin, command) || command != "NEXT") {
+        throw std::runtime_error("expected NEXT request");
+    }
+}
+
 void write_public_events(
     const Scenario& scenario,
     const std::string& case_id,
-    const std::string& run_id) {
+    const std::string& run_id, bool interactive) {
     for (const Event& event : scenario.events) {
+        if (interactive) await_request();
         std::cout << "{\"schema_version\":\"event.v1\","
                      "\"case_id\":\"" << case_id << "\","
                      "\"run_id\":\"" << run_id << "\","
@@ -87,6 +95,11 @@ void write_public_events(
                      "\"clock_domain\":\"simulated\","
                      "\"event_type\":\"" << event.event_type << "\","
                      "\"observed\":true}\n";
+        if (interactive) std::cout.flush();
+    }
+    if (interactive) {
+        await_request();
+        std::cout << "END" << std::endl;
     }
 }
 
@@ -98,7 +111,8 @@ int main(int argc, char** argv) {
             print_usage();
             return 0;
         }
-        if (argc != 9 || std::string(argv[1]) != "--fault" ||
+        const bool interactive = argc == 10 && std::string(argv[9]) == "--interactive";
+        if ((argc != 9 && !interactive) || std::string(argv[1]) != "--fault" ||
             std::string(argv[3]) != "--case-id" ||
             std::string(argv[5]) != "--run-id" ||
             std::string(argv[7]) != "--oracle-file") {
@@ -110,7 +124,7 @@ int main(int argc, char** argv) {
         validate_identifier(argv[4], "case-id");
         validate_identifier(argv[6], "run-id");
         write_oracle(argv[8], scenario);
-        write_public_events(scenario, argv[4], argv[6]);
+        write_public_events(scenario, argv[4], argv[6], interactive);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "ecu_bench: " << error.what() << '\n';

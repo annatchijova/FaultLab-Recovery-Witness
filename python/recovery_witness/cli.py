@@ -1,6 +1,7 @@
 """Command-line entry point for the first host investigation loop."""
 
 import argparse
+import asyncio
 import json
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from .harness import (
     validate_artifact_paths,
     write_case_file,
 )
+from .live import acquire
 from .investigator import InvestigationInput, investigate
 
 
@@ -21,19 +23,21 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--case-id", required=True)
     parser.add_argument("--mechanic-observation", action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--interactive", action="store_true", help="Request observations from a running bench")
     return parser
 
 
 def main() -> int:
     args = _parser().parse_args()
     validate_artifact_paths(path=args.output, oracle_file=args.oracle_file)
-    public_events = run_bench(
-        args.bench,
-        args.fault,
-        args.oracle_file,
-        case_id=args.case_id,
-        run_id=args.case_id,
-    )
+    acquisition = None
+    if args.interactive:
+        public_events, acquisition = asyncio.run(acquire(
+            args.bench, args.fault, args.oracle_file, args.case_id, args.case_id
+        ))
+    else:
+        public_events = run_bench(args.bench, args.fault, args.oracle_file,
+                                  case_id=args.case_id, run_id=args.case_id)
     payload = investigate(
         InvestigationInput(
             case_id=args.case_id,
@@ -41,6 +45,8 @@ def main() -> int:
             bench_observations=public_events,
         )
     )
+    if acquisition is not None:
+        payload["acquisition"] = acquisition
     write_case_file(args.output, build_case_file(payload))
     print(json.dumps({"case_file": str(args.output), "decision": payload["decision"]}))
     return 0
