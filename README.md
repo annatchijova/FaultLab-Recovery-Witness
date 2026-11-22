@@ -140,13 +140,43 @@ the hidden development oracle in a separate file. The generated case file is
 sealed with a versioned canonical serializer; the oracle is not passed to the
 investigator.
 Public bench events are linked with a genesis-based hash chain inside the case
-file. This protects event ordering and tampering within one received run; it
-does not yet provide cross-run custody or authenticate the bench executable.
+file. The verifier reports the case seal, schema, event count and event-chain
+status separately. A case without bench events is not accepted as a verified
+host capture. Historical cases may remain readable while reporting absent
+integrity guarantees. These unkeyed hashes detect changes relative to the
+received bytes. They do not authenticate the author, recorder or executable,
+or establish custody between runs.
+
+The CLI gives each attempt a fresh run ID and writes to new artifact paths. It
+stages the oracle and case, then publishes the oracle before the case using
+exclusive hard links. The case file marks completion. If interrupted between
+publications, an orphan oracle may remain. Preserve it and retry with new paths.
+Both destination filesystems must support hard links. See
+[host artifact custody](docs/host-artifact-custody.md) for recovery details.
 
 An independently implemented verifier checks a generated case file without
 importing the producer package:
 
     python3 tools/verify_case.py path/to/case.json
+
+## Current evidence limits
+
+The host bench contains three fixed development scenarios. Replaying them tests
+repeatability and protocol behavior. It does not estimate performance on
+independent cases or establish that a simulated mechanism occurred in a
+vehicle. No independently acquired recorder data or held-out measurements are
+currently available. The native query and the event returned afterward come
+from the same fixture, so their agreement checks the protocol only. Recorder
+identity, calibration and alignment must be established separately.
+
+The case seal and event chain are unkeyed hashes. They support integrity checks
+over the received bytes, but do not authenticate a producer or provide a
+trusted cross-run custody record. Two-file publication is ordered and
+collision-safe, but a process or system interruption can leave an orphan
+oracle. The current native and host implementation has not been validated on
+QNX. These limits are described in
+[host artifact custody](docs/host-artifact-custody.md) and the
+[host recorder sample contract](docs/host-recorder-sample.md).
 
 ## Scope and boundaries
 

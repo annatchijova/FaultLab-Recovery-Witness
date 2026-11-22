@@ -72,6 +72,10 @@ void write_oracle(const std::filesystem::path& path, const Scenario& scenario) {
     output << "{\"schema_version\":\"oracle.v1\",\"fault\":\""
            << scenario.fault << "\",\"outcome\":\"" << scenario.outcome
            << "\"}\n";
+    output.close();
+    if (!output) {
+        throw std::runtime_error("cannot persist oracle file: " + path.string());
+    }
 }
 
 void await_request(const Event* pending = nullptr) {
@@ -129,8 +133,10 @@ int main(int argc, char** argv) {
         const Scenario scenario = scenario_for(argv[2]);
         validate_identifier(argv[4], "case-id");
         validate_identifier(argv[6], "run-id");
-        write_oracle(argv[8], scenario);
         write_public_events(scenario, argv[4], argv[6], interactive);
+        std::cout.flush();
+        if (!std::cout) throw std::runtime_error("cannot write public events");
+        write_oracle(argv[8], scenario);
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "ecu_bench: " << error.what() << '\n';

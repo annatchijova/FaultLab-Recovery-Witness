@@ -17,7 +17,7 @@ class HostSampleTests(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.case = Path(folder.name) / "case"
         self.sample = Path(folder.name) / "sample"
-        events = chain_events([dict(source="bench", case_id="c", run_id="r", clock_domain="simulated",
+        events = chain_events([dict(schema_version="event.v1", source="bench", case_id="c", run_id="r", clock_domain="simulated",
                                     observed=True, sequence=i, event_type=name)
                                for i, name in enumerate(("diagnostic_request", "response_timeout", "module_restart"), 1)])
         query = dict(command="CHECK_RESTART", event_type="module_restart", sequence=3, observed=True)
@@ -34,6 +34,16 @@ class HostSampleTests(unittest.TestCase):
     def test_aligned_outcomes(self):
         for value, status in ((True, "AGREES"), (False, "DISAGREES"), (None, "UNKNOWN")):
             self.assertEqual(json.loads(self.invoke(observed=value).stdout)["comparison"], status)
+
+    def test_sample_binding_versions(self):
+        legacy = json.loads(self.invoke().stdout)
+        self.assertEqual(legacy["sample_binding"], "legacy_declared_coordinates")
+        version = "host-recorder-sample.v2"
+        digest = json.loads(self.case.read_bytes())["sha256"]
+        for fields in ({}, {"case_seal": "0" * 64}):
+            self.assertNotEqual(self.invoke(schema_version=version, **fields).returncode, 0)
+        bound = json.loads(self.invoke(schema_version=version, case_seal=digest).stdout)
+        self.assertEqual(bound["sample_binding"], "case_seal")
 
     def test_invalid_references_and_values(self):
         for fields in (dict(run_id="other"), dict(event_type="recovery_started"), dict(observed=1)):

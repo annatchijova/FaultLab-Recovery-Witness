@@ -5,21 +5,20 @@ import asyncio
 from .experiment import assess
 from .harness import (
     _BENCH_TIMEOUT_SECONDS, _MAX_EVENT_COUNT, _MAX_EVENT_LINE_LENGTH,
-    _MAX_PUBLIC_OUTPUT_BYTES, parse_public_events,
+    _MAX_PUBLIC_OUTPUT_BYTES, parse_public_record, staged_oracle, validate_identifier,
 )
 from .sealing import chain_events
 
 
 async def _exchange(process, case_id, run_id, query=False):
-    lines = []
+    events = []
     requests = []
-    events = ()
     checks = []
     pending_check = None
     total = 0
     probe = assess(events, case_id)[0]["next_bench_probe"]
     while True:
-        if query and len(lines) == 2 and probe and probe["sequence"] == 3:
+        if query and len(events) == 2 and probe and probe["sequence"] == 3:
             predictions = probe["predictions"]
             if "module_restart" in predictions.values():
                 command, target = "CHECK_RESTART", "module_restart"
@@ -37,16 +36,19 @@ async def _exchange(process, case_id, run_id, query=False):
         line = await process.stdout.readline()
         if line == b"END\n":
             break
-        if not line.endswith(b"\n"):
+        if not line.endswith(b"\n") or not line.strip():
             raise ValueError("Incomplete interactive bench response")
         total += len(line)
-        if total > _MAX_PUBLIC_OUTPUT_BYTES or len(lines) >= _MAX_EVENT_COUNT:
+        if total > _MAX_PUBLIC_OUTPUT_BYTES or len(events) >= _MAX_EVENT_COUNT:
             raise ValueError("Interactive capture exceeded its size limit")
-        lines.append(line.decode("utf-8"))
-        if probe and len(lines) == probe["sequence"]:
-            events = parse_public_events("".join(lines))
-            if any(event.get("case_id") != case_id or event.get("run_id") != run_id for event in events):
-                raise ValueError("Unexpected interactive run identity")
+        position = len(events) + 1
+        event = parse_public_record(line[:-1].decode("utf-8"), position)
+        if event["sequence"] != position:
+            raise ValueError("Interactive sequence is not contiguous")
+        if event["case_id"] != case_id or event["run_id"] != run_id:
+            raise ValueError("Unexpected interactive run identity")
+        events.append(event)
+        if probe and position == probe["sequence"]:
             if pending_check is not None:
                 actual = events[-1]["event_type"] == pending_check["event_type"]
                 if actual != pending_check["observed"]:
@@ -60,9 +62,8 @@ async def _exchange(process, case_id, run_id, query=False):
     process.stdin.close()
     if await process.stdout.read(1) or await process.wait() != 0:
         raise ValueError("Invalid interactive bench completion")
-    events = parse_public_events("".join(lines))
-    if any(event.get("case_id") != case_id or event.get("run_id") != run_id for event in events):
-        raise ValueError("Unexpected interactive run identity")
+    if not events:
+        raise ValueError("bench produced no public events")
     acquisition = {
         "schema_version": "host-acquisition.v1", "protocol": "NEXT/END",
         "requests": requests, "pending_request": probe,
@@ -73,6 +74,13 @@ async def _exchange(process, case_id, run_id, query=False):
 
 
 async def acquire(executable, fault, oracle_file, case_id, run_id, query=False):
+    validate_identifier(case_id, "case_id")
+    validate_identifier(run_id, "run_id")
+    with staged_oracle(oracle_file) as pending:
+        return await _acquire(executable, fault, pending, case_id, run_id, query)
+
+
+async def _acquire(executable, fault, oracle_file, case_id, run_id, query):
     process = await asyncio.create_subprocess_exec(
         str(executable), "--fault", fault, "--case-id", case_id, "--run-id", run_id,
         "--oracle-file", str(oracle_file), "--interactive",
@@ -80,10 +88,7 @@ async def acquire(executable, fault, oracle_file, case_id, run_id, query=False):
         stderr=asyncio.subprocess.DEVNULL, limit=_MAX_EVENT_LINE_LENGTH,
     )
     try:
-        result = await asyncio.wait_for(_exchange(process, case_id, run_id, query), _BENCH_TIMEOUT_SECONDS)
-        if not oracle_file.is_file():
-            raise ValueError("Missing separate bench oracle")
-        return result
+        return await asyncio.wait_for(_exchange(process, case_id, run_id, query), _BENCH_TIMEOUT_SECONDS)
     finally:
         if process.returncode is None:
             try:

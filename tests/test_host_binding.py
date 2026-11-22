@@ -1,5 +1,4 @@
 import json
-import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -25,11 +24,10 @@ class HostBindingTests(unittest.TestCase):
 
     def test_harness_checks_requested_identity(self):
         event = dict(schema_version="event.v1", source="bench", case_id="a",
-                     run_id="different", sequence=1, event_type="diagnostic_request")
-        process = subprocess.CompletedProcess([], 0, json.dumps(event), "")
+                     run_id="different", observed=True, clock_domain="simulated", sequence=1, event_type="diagnostic_request")
         with tempfile.TemporaryDirectory() as directory:
             oracle = Path(directory) / "oracle.json"
             oracle.touch()
-            with patch("recovery_witness.harness.subprocess.run", return_value=process):
+            with patch("recovery_witness.harness._collect_batch", return_value=json.dumps(event)):
                 with self.assertRaisesRegex(ValueError, "identity"):
                     run_bench(Path("bench"), "message_loss", oracle, case_id="a", run_id="b")

@@ -5,10 +5,12 @@ developed. An OpenAI-backed investigator can be added behind the same boundary;
 it must not receive hidden bench-oracle fields or emit a vehicle diagnosis.
 """
 
-from .experiment import assess
-
 from dataclasses import dataclass
 from typing import Any, Mapping
+
+from .experiment import assess
+from .harness import validate_public_event
+from .sealing import verify_event_chain
 
 
 SCHEMA_VERSION = "case-file.v1"
@@ -45,20 +47,26 @@ def _require_text(value: Any, field: str) -> str:
     return value
 
 
-def _validate_case(case: InvestigationInput) -> None:
-    case_id = _require_text(case.case_id, "case_id")
+def validate_request(case_id: str, mechanic_observations: tuple[str, ...]) -> None:
+    case_id = _require_text(case_id, "case_id")
     if len(case_id) > _MAX_CASE_ID_LENGTH:
         raise ValueError(f"case_id exceeds {_MAX_CASE_ID_LENGTH} characters")
 
-    if not isinstance(case.mechanic_observations, tuple):
+    if not isinstance(mechanic_observations, tuple):
         raise ValueError("mechanic_observations must be a tuple")
-    if not case.mechanic_observations:
+    if not mechanic_observations:
         raise ValueError("at least one mechanic observation is required")
-    for index, observation in enumerate(case.mechanic_observations):
+    for index, observation in enumerate(mechanic_observations):
         _require_text(observation, f"mechanic_observations[{index}]")
 
+
+
+def _validate_case(case: InvestigationInput) -> None:
+    validate_request(case.case_id, case.mechanic_observations)
     if not isinstance(case.bench_observations, tuple):
         raise ValueError("bench_observations must be a tuple")
+    formats = set()
+    run_ids = set()
     for index, observation in enumerate(case.bench_observations):
         if not isinstance(observation, Mapping):
             raise ValueError(f"bench_observations[{index}] must be a mapping")
@@ -70,8 +78,26 @@ def _validate_case(case: InvestigationInput) -> None:
             raise ValueError(f"bench_observations[{index}] must have source=bench")
         _require_text(observation.get("event_type"), f"bench_observations[{index}].event_type")
         sequence = observation.get("sequence")
-        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 0:
-            raise ValueError(f"bench_observations[{index}].sequence must be a non-negative integer")
+        if type(sequence) is not int or sequence != index + 1:
+            raise ValueError("Bench observations must have contiguous integer positions")
+        if set(observation) == {"source", "event_type", "sequence"}:
+            # Historical direct-API observations carry no execution provenance.
+            formats.add("legacy")
+            continue
+        chain_fields = {"prev_hash", "event_hash"} & observation.keys()
+        if chain_fields and len(chain_fields) != 2:
+            raise ValueError("Incomplete event chain metadata")
+        validate_public_event({k: v for k, v in observation.items() if k not in chain_fields})
+        if observation["case_id"] != case.case_id:
+            raise ValueError("Unexpected observation case identity")
+        run_ids.add(observation["run_id"])
+        formats.add("chained" if chain_fields else "raw")
+    if len(formats) > 1 or len(run_ids) > 1:
+        raise ValueError("Mixed observation formats or execution identities")
+    if formats == {"chained"}:
+        report = verify_event_chain([dict(event) for event in case.bench_observations])
+        if not report["linkage_ok"] or not report["integrity_ok"]:
+            raise ValueError("Invalid event chain")
 
 
 def _hypotheses() -> list[dict[str, str]]:

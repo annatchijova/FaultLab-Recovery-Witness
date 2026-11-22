@@ -1,8 +1,12 @@
 """Host harness boundary between the C++ bench and the Python investigator."""
 
+import asyncio
+from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
-import subprocess
+import re
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any, Mapping
@@ -40,37 +44,57 @@ def _contains_hidden_key(value: Any) -> bool:
     return False
 
 
+def validate_identifier(value: Any, field: str) -> None:
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", value):
+        raise ValueError(f"invalid {field}: expected 1..128 identifier characters")
+
+
+def validate_public_event(event: Any) -> None:
+    """Validate one raw event.v1 record before attaching chain metadata."""
+    if not isinstance(event, dict) or set(event) != _PUBLIC_EVENT_KEYS:
+        raise ValueError("public event must contain exactly the event.v1 fields")
+    if event["schema_version"] != "event.v1" or event["source"] != "bench":
+        raise ValueError("unsupported public event schema or source")
+    if event["clock_domain"] != "simulated" or event["observed"] is not True:
+        raise ValueError("invalid public event clock domain or observation flag")
+    for key in ("case_id", "run_id"):
+        validate_identifier(event[key], key)
+    if not isinstance(event["event_type"], str) or not event["event_type"].strip():
+        raise ValueError("public event has no event_type")
+    if type(event["sequence"]) is not int or event["sequence"] < 1:
+        raise ValueError("public event has an invalid sequence")
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON field: {key}")
+        result[key] = value
+    return result
+
+
+def parse_public_record(line: str, position: int) -> dict[str, Any]:
+    if len(line.encode("utf-8")) > _MAX_EVENT_LINE_LENGTH:
+        raise ValueError(f"event on line {position} exceeds size limit")
+    try:
+        event = json.loads(line, object_pairs_hook=_unique_object)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"invalid event JSON on line {position}") from error
+    validate_public_event(event)
+    return event
+
+
 def parse_public_events(lines: str) -> tuple[dict[str, Any], ...]:
     """Parse public JSONL events while rejecting hidden oracle material."""
 
     if len(lines.encode("utf-8")) > _MAX_PUBLIC_OUTPUT_BYTES:
         raise ValueError("bench public output exceeds size limit")
     events: list[dict[str, Any]] = []
-    for line_number, line in enumerate(lines.splitlines(), start=1):
+    for line_number, line in enumerate(lines.split("\n"), start=1):
         if not line.strip():
             continue
-        if len(line.encode("utf-8")) > _MAX_EVENT_LINE_LENGTH:
-            raise ValueError(f"event on line {line_number} exceeds size limit")
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError as error:
-            raise ValueError(f"invalid event JSON on line {line_number}") from error
-        if not isinstance(event, dict):
-            raise ValueError(f"event on line {line_number} must be an object")
-        if _contains_hidden_key(event):
-            raise ValueError(f"event on line {line_number} contains hidden oracle data")
-        if set(event) - _PUBLIC_EVENT_KEYS:
-            raise ValueError(f"event on line {line_number} contains unknown fields")
-        if event.get("schema_version") != "event.v1":
-            raise ValueError(f"event on line {line_number} has an unsupported schema")
-        if event.get("source") != "bench":
-            raise ValueError(f"event on line {line_number} must have source=bench")
-        if not isinstance(event.get("event_type"), str) or not event["event_type"]:
-            raise ValueError(f"event on line {line_number} has no event_type")
-        sequence = event.get("sequence")
-        if isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1:
-            raise ValueError(f"event on line {line_number} has an invalid sequence")
-        events.append(event)
+        events.append(parse_public_record(line, line_number))
         if len(events) > _MAX_EVENT_COUNT:
             raise ValueError("bench produced too many public events")
     if not events:
@@ -79,6 +103,72 @@ def parse_public_events(lines: str) -> tuple[dict[str, Any], ...]:
     if sequences != list(range(1, len(sequences) + 1)):
         raise ValueError("public event sequence is not contiguous")
     return tuple(events)
+
+
+@contextmanager
+def staged_oracle(destination: Path):
+    """Publish only the regular, nonempty oracle produced by this invocation."""
+    with tempfile.TemporaryDirectory(dir=destination.parent) as directory:
+        pending = Path(directory) / "oracle.json"
+        yield pending
+        try:
+            metadata = pending.lstat()
+        except FileNotFoundError as error:
+            raise RuntimeError("bench did not create its separate oracle artifact") from error
+        if not stat.S_ISREG(metadata.st_mode) or not metadata.st_size:
+            raise RuntimeError("bench oracle artifact is empty or not a regular file")
+        os.replace(pending, destination)
+
+
+async def _bounded_batch(arguments):
+    process = await asyncio.create_subprocess_exec(
+        *arguments, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+    )
+
+    async def read_stream(stream, limit):
+        output = bytearray()
+        while chunk := await stream.read(8192):
+            if len(output) + len(chunk) > limit:
+                raise RuntimeError("bench output exceeds size limit")
+            output.extend(chunk)
+        return output
+
+    readers = [
+        asyncio.create_task(read_stream(process.stdout, _MAX_PUBLIC_OUTPUT_BYTES)),
+        asyncio.create_task(read_stream(process.stderr, _MAX_EVENT_LINE_LENGTH)),
+    ]
+
+    async def collect():
+        output, errors = await asyncio.gather(*readers)
+        status = await process.wait()
+        if status:
+            raise RuntimeError(f"bench failed with exit code {status}: {errors.decode('utf-8', 'replace').strip()}")
+        return output.decode("utf-8")
+
+    try:
+        return await asyncio.wait_for(collect(), _BENCH_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError as error:
+        raise RuntimeError("bench exceeded its execution timeout") from error
+    finally:
+        if process.returncode is None:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+        for reader in readers:
+            reader.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
+        # Consume buffered bytes so pipe shutdown can complete after a limit error.
+        await process.communicate()
+
+
+def _collect_batch(arguments):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(_bounded_batch(arguments))
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        return worker.submit(asyncio.run, _bounded_batch(arguments)).result()
 
 
 def run_bench(
@@ -91,39 +181,17 @@ def run_bench(
 ) -> tuple[dict[str, Any], ...]:
     """Run the bench and return public events without reading the oracle."""
 
-    try:
-        completed = subprocess.run(
-            [
-                str(executable),
-                "--fault",
-                fault,
-                "--case-id",
-                case_id,
-                "--run-id",
-                run_id,
-                "--oracle-file",
-                str(oracle_file),
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=_BENCH_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as error:
-        raise RuntimeError("bench exceeded its execution timeout") from error
-    if len(completed.stdout.encode("utf-8")) > _MAX_PUBLIC_OUTPUT_BYTES:
-        raise RuntimeError("bench public output exceeds size limit")
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"bench failed with exit code {completed.returncode}: "
-            f"{completed.stderr.strip()}"
-        )
-    if not oracle_file.is_file():
-        raise RuntimeError("bench did not create its separate oracle artifact")
-    events = parse_public_events(completed.stdout)
-    if any(event.get("case_id") != case_id or event.get("run_id") != run_id for event in events):
-        raise ValueError("Public event identity differs from the requested bench run")
-    return tuple(chain_events(list(events)))
+    validate_identifier(case_id, "case_id")
+    validate_identifier(run_id, "run_id")
+    with staged_oracle(oracle_file) as pending:
+        lines = _collect_batch([
+            str(executable), "--fault", fault, "--case-id", case_id,
+            "--run-id", run_id, "--oracle-file", str(pending),
+        ])
+        events = parse_public_events(lines)
+        if any(event["case_id"] != case_id or event["run_id"] != run_id for event in events):
+            raise ValueError("Public event identity differs from the requested bench run")
+        return tuple(chain_events(list(events)))
 
 
 def build_case_file(payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -164,7 +232,8 @@ def verify_case_file(case_file: Mapping[str, Any]) -> bool:
 def validate_artifact_paths(*, path: Path, oracle_file: Path) -> None:
     """Reject an output path that would destroy the hidden oracle artifact."""
 
-    if path.absolute() == oracle_file.absolute():
+    if (path.resolve() == oracle_file.resolve() or
+            (path.exists() and oracle_file.exists() and path.samefile(oracle_file))):
         raise ValueError("case output and oracle file must be different paths")
 
 

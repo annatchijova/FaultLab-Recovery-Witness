@@ -24,7 +24,8 @@ def assess(events, case_id):
             for label in candidates
         }
         if (event.get("case_id") != case_id or not isinstance(run_id, str) or not run_id
-                or event.get("run_id") != run_id or event.get("sequence") != position
+                or event.get("run_id") != run_id or type(event.get("sequence")) is not int
+                or event.get("sequence") != position
                 or event.get("observed") is not True or event.get("clock_domain") != "simulated"
                 or event.get("schema_version") != "event.v1"):
             candidates = []

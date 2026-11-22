@@ -3,23 +3,16 @@
 import argparse
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 from recovery_witness.experiment import assess
-from verify_case import verify
+from verify_case import host_events, verified_document
 
 
 def replay(path):
-    data = path.read_bytes()
-    with tempfile.TemporaryDirectory() as directory:
-        snapshot = Path(directory) / "case.json"
-        snapshot.write_bytes(data)
-        if not verify(snapshot)["valid"]:
-            raise ValueError("Case integrity verification failed")
-    case = json.loads(data)["payload"]
-    events = [item for item in case["observations"] if item["source"] == "bench"]
+    case = verified_document(path.read_bytes())["payload"]
+    events = host_events(case)
     visible = 0
     requests = []
     while True:

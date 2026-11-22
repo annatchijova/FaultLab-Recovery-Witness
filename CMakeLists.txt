@@ -16,3 +16,5 @@ endif()
 
 enable_testing()
 add_test(NAME ecu_bench_help COMMAND ecu_bench --help)
+add_test(NAME ecu_bench_identifiers COMMAND ${CMAKE_COMMAND}
+    -DBENCH=$<TARGET_FILE:ecu_bench> -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/identifiers.cmake)

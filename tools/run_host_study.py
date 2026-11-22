@@ -4,11 +4,12 @@ import argparse
 import json
 import sys
 import tempfile
+from uuid import uuid4
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 from recovery_witness.harness import build_case_file, run_bench, write_case_file
-from recovery_witness.investigator import InvestigationInput, investigate
+from recovery_witness.investigator import InvestigationInput, investigate, validate_request
 from review_case import report
 
 # Development oracle outcomes are evaluated only after the case has been sealed.
@@ -20,17 +21,20 @@ LABELS = {
 
 
 def run(args, stage):
+    validate_request(args.case_id, tuple(args.mechanic_observation))
+    attempt = uuid4().hex
     (stage / "private").mkdir()
     expected = []
     predictions = []
     for index, scenario in enumerate(("power_drop", "message_loss", "recovery_incomplete"), 1):
-        run_id = f"run-{index}"
-        oracle = stage / "private" / f"{run_id}.json"
+        stem = f"run-{index}"
+        run_id = f"{attempt}-{index}"
+        oracle = stage / "private" / f"{stem}.json"
         events = run_bench(args.bench.resolve(), scenario, oracle, case_id=args.case_id, run_id=run_id)
         payload = investigate(InvestigationInput(args.case_id, tuple(args.mechanic_observation), events))
-        case_path = stage / f"{run_id}.json"
+        case_path = stage / f"{stem}.json"
         write_case_file(case_path, build_case_file(payload))
-        (stage / f"{run_id}.txt").write_text(report(case_path.read_bytes()) + "\n", encoding="utf-8")
+        (stage / f"{stem}.txt").write_text(report(case_path.read_bytes()) + "\n", encoding="utf-8")
         predictions.append(payload["bench_assessment"]["matched_hypothesis"])
         truth = json.loads(oracle.read_bytes())
         if truth["schema_version"] != "oracle.v1" or truth["fault"] != scenario:

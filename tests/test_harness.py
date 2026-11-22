@@ -24,10 +24,10 @@ class HarnessContractTests(unittest.TestCase):
         public_lines = (
             '{"schema_version":"event.v1","source":"bench",'
             '"sequence":1,"event_type":"diagnostic_request",'
-            '"clock_domain":"simulated","observed":true}\n'
+            '"clock_domain":"simulated","observed":true,"case_id":"a","run_id":"b"}\n'
             '{"schema_version":"event.v1","source":"bench",'
             '"sequence":2,"event_type":"response_timeout",'
-            '"clock_domain":"simulated","observed":true}\n'
+            '"clock_domain":"simulated","observed":true,"case_id":"a","run_id":"b"}\n'
         )
 
         events = parse_public_events(public_lines)

@@ -3,9 +3,8 @@
 import argparse
 import json
 from pathlib import Path
-import tempfile
 
-from verify_case import verify
+from verify_case import verified_document
 
 
 def quoted(value):
@@ -15,26 +14,19 @@ def quoted(value):
 
 
 def report(data):
-    with tempfile.TemporaryDirectory() as directory:
-        snapshot = Path(directory) / "case.json"
-        snapshot.write_bytes(data)
-        if not verify(snapshot)["valid"]:
-            raise ValueError("Case integrity verification failed")
-    case = json.loads(data)
+    case = verified_document(data, allow_unattested=True)
     payload = case["payload"]
-    if payload["schema_version"] != "case-file.v1":
-        raise ValueError("Unsupported investigation schema")
     lines = ["Case " + quoted(payload["case_id"]), "SHA-256 " + case["sha256"]]
     for source, field in (("mechanic", "text"), ("bench", "event_type")):
         observations = [item for item in payload["observations"] if item["source"] == source]
-        if not observations:
-            raise ValueError("Missing observations from " + source)
         lines.append("\n" + source.capitalize() + " observations")
+        if not observations:
+            lines.append("  No observations recorded")
+        elif source == "bench" and "event_hash" not in observations[0]:
+            lines.append("  Historical capture without an event hash chain")
         lines.extend("  " + quoted(item[field]) for item in observations)
-    if any(item["source"] not in ("mechanic", "bench") for item in payload["observations"]):
-        raise ValueError("Unknown observation source")
     lines.append("\nCompeting hypotheses")
-    if len(payload["hypotheses"]) < 2:
+    if not isinstance(payload["hypotheses"], list) or len(payload["hypotheses"]) < 2:
         raise ValueError("Missing rival hypotheses")
     for item in payload["hypotheses"]:
         lines.append("  " + quoted(item["mechanism"]) + " — " + quoted(item["prediction"]))
@@ -42,7 +34,8 @@ def report(data):
         assessment = payload["bench_assessment"]
         lines.append("\nHost experiment\n  " + quoted(assessment["requested_experiment"]))
         lines.append("  " + quoted(assessment["reason"]))
-        lines.append("  Matching host hypothesis: " + quoted(assessment["matched_hypothesis"] or "unresolved"))
+        match = assessment["matched_hypothesis"]
+        lines.append("  Matching host hypothesis: " + quoted("unresolved" if match is None else match))
     for label, field in (("Decision", "decision"), ("Scope", "decision_scope"),
                          ("Proposed observation for human review", "next_observation")):
         lines.append("\n" + label + "\n  " + quoted(payload[field]))
