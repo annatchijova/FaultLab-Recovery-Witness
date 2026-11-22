@@ -24,6 +24,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--mechanic-observation", action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--interactive", action="store_true", help="Request observations from a running bench")
+    parser.add_argument("--query", action="store_true", help="Query the next simulated event before advancing")
     return parser
 
 
@@ -31,9 +32,9 @@ def main() -> int:
     args = _parser().parse_args()
     validate_artifact_paths(path=args.output, oracle_file=args.oracle_file)
     acquisition = None
-    if args.interactive:
+    if args.interactive or args.query:
         public_events, acquisition = asyncio.run(acquire(
-            args.bench, args.fault, args.oracle_file, args.case_id, args.case_id
+            args.bench, args.fault, args.oracle_file, args.case_id, args.case_id, query=args.query
         ))
     else:
         public_events = run_bench(args.bench, args.fault, args.oracle_file,

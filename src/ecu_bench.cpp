@@ -74,11 +74,17 @@ void write_oracle(const std::filesystem::path& path, const Scenario& scenario) {
            << "\"}\n";
 }
 
-void await_request() {
+void await_request(const Event* pending = nullptr) {
     std::string command;
-    if (!std::getline(std::cin, command) || command != "NEXT") {
-        throw std::runtime_error("expected NEXT request");
+    while (std::getline(std::cin, command)) {
+        if (command == "NEXT") return;
+        if (pending == nullptr || (command != "CHECK_RESTART" && command != "CHECK_RECOVERY")) {
+            throw std::runtime_error("unknown or unavailable observation request");
+        }
+        const std::string expected = command == "CHECK_RESTART" ? "module_restart" : "recovery_started";
+        std::cout << (expected == pending->event_type ? "YES" : "NO") << std::endl;
     }
+    throw std::runtime_error("incomplete observation request");
 }
 
 void write_public_events(
@@ -86,7 +92,7 @@ void write_public_events(
     const std::string& case_id,
     const std::string& run_id, bool interactive) {
     for (const Event& event : scenario.events) {
-        if (interactive) await_request();
+        if (interactive) await_request(&event);
         std::cout << "{\"schema_version\":\"event.v1\","
                      "\"case_id\":\"" << case_id << "\","
                      "\"run_id\":\"" << run_id << "\","
