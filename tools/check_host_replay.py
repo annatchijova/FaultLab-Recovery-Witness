@@ -28,7 +28,7 @@ def main():
                 subprocess.run([
                     sys.executable, "-m", "recovery_witness.cli",
                     "--bench", str(args.bench.resolve()), "--fault", scenario,
-                    "--case-id", "host-fixture", "--mechanic-observation",
+                    "--case-id", "host-fixture", "--run-id", f"replay-{scenario}", "--mechanic-observation",
                     "Intermittent loss of communication during startup.",
                     "--oracle-file", str(case.with_name("oracle.json")), "--output", str(case),
                 ], check=True, env={**os.environ, "PYTHONPATH": str(ROOT / "python"),
