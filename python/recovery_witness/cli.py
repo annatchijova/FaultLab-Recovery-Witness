@@ -17,6 +17,7 @@ from .harness import (
 from .live import acquire
 from .investigator import InvestigationInput, investigate, validate_request
 from .narrator import narrate, null_narrator
+from .narrator_openai import DEFAULT_API_KEY_ENV, DEFAULT_MODEL, make_openai_narrator
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -34,9 +35,32 @@ def _parser() -> argparse.ArgumentParser:
         "--narrative-output",
         type=Path,
         help="Write a case-narrative.v1 artifact beside the sealed case file. "
-        "Uses the offline null narrator; it never alters the sealed case file.",
+        "It is produced after sealing and never alters the sealed case file.",
+    )
+    parser.add_argument(
+        "--narrator-backend",
+        choices=("null", "openai"),
+        default="null",
+        help="Narration backend (default: offline deterministic template).",
+    )
+    parser.add_argument(
+        "--narrator-model",
+        default=DEFAULT_MODEL,
+        help="Model name for the openai narrator backend.",
+    )
+    parser.add_argument(
+        "--narrator-api-key-env",
+        default=DEFAULT_API_KEY_ENV,
+        help="Environment variable holding the OpenAI API key for the openai narrator backend. "
+        "The key is read at call time and never logged.",
     )
     return parser
+
+
+def _select_narrator(args):
+    if args.narrator_backend == "openai":
+        return make_openai_narrator(model=args.narrator_model, api_key_env=args.narrator_api_key_env)
+    return null_narrator
 
 
 def _capture(args, run_id, pending_oracle):
@@ -91,7 +115,7 @@ def main() -> int:
         # it can never influence the sealed payload or its digest, and a
         # narration failure here must not be allowed to undo the publication
         # above.
-        write_case_file(args.narrative_output, narrate(sealed_case_file, null_narrator))
+        write_case_file(args.narrative_output, narrate(sealed_case_file, _select_narrator(args)))
     print(json.dumps({"case_file": str(args.output), "run_id": run_id, "decision": payload["decision"]}))
     return 0
 

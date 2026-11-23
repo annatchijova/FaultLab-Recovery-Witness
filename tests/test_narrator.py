@@ -111,6 +111,37 @@ class CliNarrativeTests(unittest.TestCase):
             self.assertEqual(narrative_file["case_id"], "a")
             self.assertTrue(narrative_file["text"])
 
+    def test_narrator_backend_openai_is_selectable_and_never_touches_the_seal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            case, oracle, narrative = root / "case.json", root / "oracle.json", root / "narrative.json"
+            args = ["cli", "--bench", "unused", "--fault", "message_loss", "--case-id", "a",
+                    "--run-id", "b", "--mechanic-observation", "Intermittent communication loss",
+                    "--oracle-file", str(oracle), "--output", str(case),
+                    "--narrative-output", str(narrative),
+                    "--narrator-backend", "openai", "--narrator-api-key-env", "ECU_TEST_CLI_KEY"]
+
+            def capture(cli_args, run_id, pending):
+                pending.write_text("hidden oracle")
+                return investigate(InvestigationInput(
+                    case_id="a",
+                    mechanic_observations=("Intermittent communication loss",),
+                    bench_observations=(),
+                ))
+
+            def fake_narrator(prompt):
+                return "openai-backed narration"
+
+            with patch.object(sys, "argv", args), patch.object(cli, "_capture", side_effect=capture), \
+                 patch.object(cli, "make_openai_narrator", return_value=fake_narrator) as factory:
+                self.assertEqual(cli.main(), 0)
+
+            factory.assert_called_once_with(model=cli.DEFAULT_MODEL, api_key_env="ECU_TEST_CLI_KEY")
+            case_file = json.loads(case.read_text())
+            self.assertTrue(verify_case_file(case_file))
+            narrative_file = json.loads(narrative.read_text())
+            self.assertEqual(narrative_file["text"], "openai-backed narration")
+
     def test_narrative_output_must_not_collide_with_case_or_oracle(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

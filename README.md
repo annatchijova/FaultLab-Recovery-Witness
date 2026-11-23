@@ -164,8 +164,11 @@ Passing `--narrative-output path/to/narrative.json` writes an optional
 strictly after the case file is sealed, by a narration-only layer that cannot
 alter the sealed payload or its digest; see
 [docs/investigator-agent-design.md](docs/investigator-agent-design.md). The
-current default narrator is a deterministic, offline template; no OpenAI
-backend is wired yet.
+default narrator (`--narrator-backend null`) is a deterministic, offline
+template. `--narrator-backend openai` calls the OpenAI chat completions API
+(stdlib `urllib`, no new dependency) using the key in the environment
+variable named by `--narrator-api-key-env` (default `OPENAI_API_KEY`); the
+key is read at call time only and is never logged.
 
 ## Current evidence limits
 

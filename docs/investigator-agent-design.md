@@ -1,7 +1,14 @@
 # Investigator Agent Design — Level 1
 
 **Status:** Narration-only slice implemented and wired into the CLI
-(`--narrative-output`). OpenAI backend adapter still deferred.
+(`--narrative-output`, `--narrator-backend {null,openai}`). The OpenAI
+adapter was live-verified in a development session on 2026-11-22 against the
+real API: the call succeeded and the sealed case file (`payload` and
+`sha256`) was byte-identical before and after narration. That live check was
+a manual smoke test, not a committed automated test — committed coverage for
+the OpenAI adapter (`tests/test_narrator_openai.py`,
+`tests/test_narrator.py::CliNarrativeTests`) is mock-only and makes no real
+network call, so CI stays offline and deterministic.
 
 ## What already exists
 
@@ -39,9 +46,9 @@ narrative.
 - The LLM never receives bench internals beyond what the sealed payload
   already exposes (no oracle fields were ever in that payload — enforced at
   `investigate()` and again at `build_case_file()`).
-- No OpenAI credentials are wired in this slice. The backend is a swappable
-  callable; a real OpenAI-backed implementation is a thin adapter added later
-  behind the same interface.
+- The OpenAI adapter (`recovery_witness.narrator_openai`) is a thin stdlib
+  (`urllib`) client behind the same `Narrator` callable interface; it does
+  not add a package dependency or a new manifest file.
 
 ## Boundary
 
@@ -93,14 +100,34 @@ file side is byte-identical.
   "backend"}`. This is the artifact stored alongside the sealed case file,
   never inside it.
 
+## Module: `recovery_witness.narrator_openai`
+
+`make_openai_narrator(*, model=DEFAULT_MODEL, api_key_env=DEFAULT_API_KEY_ENV,
+timeout=20.0)` returns a `Narrator` callable backed by the OpenAI chat
+completions API over stdlib `urllib`:
+
+- the API key is read from `os.environ[api_key_env]` **inside the call**,
+  never captured as an attribute of the returned callable, so it cannot be
+  logged or serialized by printing the narrator itself;
+- every raised error message is built from a short, pre-checked detail
+  string (status code, network error reason, "malformed response") — never
+  from the request/response body or headers, so the key cannot leak through
+  an exception;
+- `tests/test_narrator_openai.py` mocks `urllib.request.urlopen` and asserts
+  a canary key value appears in the `Authorization` header and nowhere else
+  (not the URL, not the body, not any raised exception message).
+
 ## CLI wiring
 
-`recovery_witness.cli` accepts an optional `--narrative-output PATH`. When
-given, `cli.main()`:
+`recovery_witness.cli` accepts an optional `--narrative-output PATH` plus
+`--narrator-backend {null,openai}` (default `null`), `--narrator-model`, and
+`--narrator-api-key-env`. When `--narrative-output` is given, `cli.main()`:
 
 1. publishes the sealed case file and oracle exactly as before (unchanged
    two-file collision-safe publication);
-2. only then calls `narrate(sealed_case_file, null_narrator)`;
+2. only then calls `narrate(sealed_case_file, narrator)`, where `narrator` is
+   `null_narrator` or `make_openai_narrator(...)` depending on
+   `--narrator-backend`;
 3. writes the result atomically with the same `write_case_file` helper used
    for the case file.
 
@@ -110,13 +137,12 @@ after the case and oracle are durably published, so it can never roll back
 or discard already-sealed work (honest degradation: an optional artifact
 failing must not destroy the core result).
 
-Covered by `tests/test_narrator.py::CliNarrativeTests`.
+Covered by `tests/test_narrator.py::CliNarrativeTests` (both backends, mocked).
 
 ## Open items
 
-- Real OpenAI-backed `Narrator` adapter (needs key management and network
-  policy, out of scope here). It plugs into the same `Narrator` callable used
-  by `cli.py` — no boundary change expected.
 - Whether the narrative artifact gets its own hash for tamper-evidence
   (likely yes, but it must never feed back into `sha256` of the case file —
   that would re-introduce the model into the decision path).
+- Whether the OpenAI adapter needs retry/backoff for transient errors; none
+  is implemented now (a failed call simply raises).
