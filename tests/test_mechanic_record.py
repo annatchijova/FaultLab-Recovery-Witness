@@ -53,6 +53,10 @@ class MechanicRecordTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must not contain a float"):
             validate_mechanic_record(MechanicRecord(freeze_frame={"battery_voltage": 12.6}))
 
+    def test_rejects_non_string_keys_nested_in_freeze_frame(self):
+        with self.assertRaisesRegex(ValueError, "keys must be strings"):
+            validate_mechanic_record(MechanicRecord(freeze_frame={"sensors": {1: "x"}}))
+
     def test_rejects_float_nested_in_freeze_frame(self):
         with self.assertRaisesRegex(ValueError, "must not contain a float"):
             validate_mechanic_record(

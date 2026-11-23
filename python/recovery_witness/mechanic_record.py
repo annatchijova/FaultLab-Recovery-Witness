@@ -61,10 +61,20 @@ def _require_text_tuple(value: Any, field_name: str) -> tuple[str, ...]:
 
 
 def _reject_float(value: Any, field_name: str) -> None:
+    """Recursively reject float values and non-string mapping keys.
+
+    Both are rejected again, generically, by sealing.seal() at seal time.
+    Checking here too gives a specific error at the mechanic-record
+    boundary instead of a generic one once the payload is already being
+    sealed.
+    """
+
     if isinstance(value, float):
         raise ValueError(f"{field_name} must not contain a float value")
     if isinstance(value, Mapping):
         for key, child in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{field_name} keys must be strings, got {key!r}")
             _reject_float(child, f"{field_name}.{key}")
     elif isinstance(value, (list, tuple)):
         for index, child in enumerate(value):
