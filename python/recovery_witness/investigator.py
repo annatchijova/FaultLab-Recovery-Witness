@@ -10,6 +10,7 @@ from typing import Any, Mapping
 
 from .experiment import assess
 from .harness import validate_public_event
+from .mechanic_record import MechanicRecord, validate_mechanic_record
 from .sealing import verify_event_chain
 
 
@@ -37,6 +38,7 @@ class InvestigationInput:
     case_id: str
     mechanic_observations: tuple[str, ...]
     bench_observations: tuple[Mapping[str, Any], ...]
+    mechanic_record: MechanicRecord | None = None
 
 
 def _require_text(value: Any, field: str) -> str:
@@ -136,7 +138,7 @@ def investigate(case: InvestigationInput) -> dict[str, Any]:
     ]
     observations.extend(dict(item) for item in case.bench_observations)
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "case_id": case.case_id,
         "observations": observations,
@@ -146,3 +148,6 @@ def investigate(case: InvestigationInput) -> dict[str, Any]:
         "decision": "ABSTAIN",
         "decision_scope": "The laboratory plan does not establish what happened in the real vehicle.",
     }
+    if case.mechanic_record is not None:
+        payload["mechanic_record"] = validate_mechanic_record(case.mechanic_record)
+    return payload

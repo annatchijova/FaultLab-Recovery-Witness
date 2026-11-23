@@ -291,7 +291,8 @@ vehicle evidence clearly.
 
 ## Open decisions
 
-- the exact Level 1 mechanic-facing case;
+- ~~the exact Level 1 mechanic-facing case~~ — resolved, see
+  [`docs/level1-case-schema.md`](level1-case-schema.md);
 - the common event and case-file schema;
 - the initial virtual-ECU and transport boundary;
 - C++17/QNX toolchain and adapter constraints;

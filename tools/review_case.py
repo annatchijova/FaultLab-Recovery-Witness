@@ -25,6 +25,19 @@ def report(data):
         elif source == "bench" and "event_hash" not in observations[0]:
             lines.append("  Historical capture without an event hash chain")
         lines.extend("  " + quoted(item[field]) for item in observations)
+    if "mechanic_record" in payload:
+        record = payload["mechanic_record"]
+        lines.append("\nMechanic-reported record (not vehicle ground truth)")
+        lines.append("  DTCs: " + (", ".join(record["dtcs"]) if record["dtcs"] else "none reported"))
+        if record.get("scanner_report"):
+            lines.append("  Scanner report: " + quoted(record["scanner_report"]))
+        if record.get("freeze_frame"):
+            lines.append("  Freeze frame: " + json.dumps(record["freeze_frame"], sort_keys=True))
+        for measurement in record["measurements"]:
+            unit = f" {measurement['unit']}" if "unit" in measurement else ""
+            lines.append(f"  Measurement: {measurement['name']} = {measurement['value']}{unit}")
+        for entry in record["history"]:
+            lines.append("  History: " + quoted(entry))
     lines.append("\nCompeting hypotheses")
     if not isinstance(payload["hypotheses"], list) or len(payload["hypotheses"]) < 2:
         raise ValueError("Missing rival hypotheses")

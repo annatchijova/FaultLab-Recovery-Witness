@@ -154,6 +154,13 @@ publications, an orphan oracle may remain. Preserve it and retry with new paths.
 Both destination filesystems must support hard links. See
 [host artifact custody](docs/host-artifact-custody.md) for recovery details.
 
+Beyond free-text `--mechanic-observation`, the CLI also accepts a structured
+mechanic record — `--dtc`, `--scanner-report`, `--freeze-frame`,
+`--measurement`, `--mechanic-history` — stored as a separate, additive
+`mechanic_record` field in the sealed payload, always mechanic-reported and
+never treated as vehicle ground truth. See
+[docs/level1-case-schema.md](docs/level1-case-schema.md).
+
 An independently implemented verifier checks a generated case file without
 importing the producer package:
 

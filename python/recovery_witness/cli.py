@@ -16,6 +16,7 @@ from .harness import (
 )
 from .live import acquire
 from .investigator import InvestigationInput, investigate, validate_request
+from .mechanic_record import MechanicRecord
 from .narrator import narrate, null_narrator
 from .narrator_openai import DEFAULT_API_KEY_ENV, DEFAULT_MODEL, make_openai_narrator
 
@@ -28,6 +29,24 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--case-id", required=True)
     parser.add_argument("--run-id", help="Execution identifier (generated when omitted); fix for replay")
     parser.add_argument("--mechanic-observation", action="append", default=[])
+    parser.add_argument(
+        "--dtc", action="append", default=[], dest="dtcs",
+        help="A reported diagnostic trouble code (e.g. U0100). Repeatable.",
+    )
+    parser.add_argument("--scanner-report", help="Free-text scanner report, if any.")
+    parser.add_argument(
+        "--freeze-frame", metavar="JSON",
+        help='Freeze-frame data as a JSON object, e.g. \'{"ignition":"on","rpm":850}\'. No floats.',
+    )
+    parser.add_argument(
+        "--measurement", action="append", default=[], dest="measurements", metavar="JSON",
+        help='A measurement as a JSON object: \'{"name":"battery_voltage","value":"12","unit":"V"}\'. '
+        "Repeatable. No floats.",
+    )
+    parser.add_argument(
+        "--mechanic-history", action="append", default=[], dest="mechanic_history",
+        help="A prior test result or repair history entry. Repeatable.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--interactive", action="store_true", help="Request observations from a running bench")
     parser.add_argument("--query", action="store_true", help="Query the next simulated event before advancing")
@@ -63,6 +82,24 @@ def _select_narrator(args):
     return null_narrator
 
 
+def _build_mechanic_record(args) -> MechanicRecord | None:
+    if not (args.dtcs or args.scanner_report or args.freeze_frame
+            or args.measurements or args.mechanic_history):
+        return None
+    try:
+        freeze_frame = json.loads(args.freeze_frame) if args.freeze_frame is not None else None
+        measurements = tuple(json.loads(item) for item in args.measurements)
+    except json.JSONDecodeError as error:
+        raise ValueError(f"Invalid JSON in --freeze-frame or --measurement: {error}") from error
+    return MechanicRecord(
+        dtcs=tuple(args.dtcs),
+        scanner_report=args.scanner_report,
+        freeze_frame=freeze_frame,
+        measurements=measurements,
+        history=tuple(args.mechanic_history),
+    )
+
+
 def _capture(args, run_id, pending_oracle):
     acquisition = None
     if args.interactive or args.query:
@@ -77,6 +114,7 @@ def _capture(args, run_id, pending_oracle):
             case_id=args.case_id,
             mechanic_observations=tuple(args.mechanic_observation),
             bench_observations=public_events,
+            mechanic_record=_build_mechanic_record(args),
         )
     )
     if acquisition is not None:

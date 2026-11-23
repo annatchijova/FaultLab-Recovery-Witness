@@ -1,7 +1,14 @@
 import json
+import sys
 import unittest
+from pathlib import Path
 
+from recovery_witness.harness import build_case_file
 from recovery_witness.investigator import InvestigationInput, investigate
+from recovery_witness.mechanic_record import MechanicRecord
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from verify_case import verify_document  # noqa: E402
 
 
 class InvestigatorContractTests(unittest.TestCase):
@@ -96,6 +103,40 @@ class InvestigatorContractTests(unittest.TestCase):
 
         self.assertEqual(encoded, json.dumps(result, sort_keys=True, separators=(",", ":")))
         self.assertEqual(result["decision"], "ABSTAIN")
+
+    def test_mechanic_record_is_additive_and_independently_verifiable(self):
+        case_without_record = InvestigationInput(
+            case_id="case-004",
+            mechanic_observations=("Intermittent communication loss",),
+            bench_observations=(),
+        )
+        case_with_record = InvestigationInput(
+            case_id="case-004",
+            mechanic_observations=("Intermittent communication loss",),
+            bench_observations=(),
+            mechanic_record=MechanicRecord(
+                dtcs=("U0100",),
+                scanner_report="Communication codes present during startup",
+                freeze_frame={"ignition": "on"},
+                measurements=({"name": "battery_voltage", "value": "12", "unit": "V"},),
+                history=("No prior repairs",),
+            ),
+        )
+
+        bare_payload = investigate(case_without_record)
+        self.assertNotIn("mechanic_record", bare_payload)
+
+        enriched_payload = investigate(case_with_record)
+        self.assertEqual(enriched_payload["mechanic_record"]["dtcs"], ["U0100"])
+        self.assertEqual(
+            {k: v for k, v in enriched_payload.items() if k != "mechanic_record"},
+            bare_payload,
+        )
+
+        sealed = build_case_file(enriched_payload)
+        report = verify_document(sealed)
+        self.assertTrue(report["case_schema_ok"])
+        self.assertTrue(report["case_seal_ok"])
 
 
 if __name__ == "__main__":
