@@ -302,7 +302,10 @@ vehicle evidence clearly.
 - the initial virtual-ECU and transport boundary;
 - C++17/QNX toolchain and adapter constraints;
 - the Python agent and frontend interface;
-- whether PDF export belongs in the first complete loop;
+- whether PDF export belongs in the first complete loop — the candidate
+  renderer now exists (`tools/export_report_pdf.py`, stdlib-only, builds on
+  `review_case.py`'s report), but whether it is part of the required Level 1
+  output, versus an optional presentation, is still undecided;
 - the ML task and evaluation design; and
 - the final demonstration format.
 

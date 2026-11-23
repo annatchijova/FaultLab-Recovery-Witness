@@ -166,6 +166,19 @@ importing the producer package:
 
     python3 tools/verify_case.py path/to/case.json
 
+`tools/review_case.py` renders a verified case as a plain-text report.
+`tools/export_report_pdf.py` renders that same report as a paginated PDF,
+hand-built with the standard library only (no PDF package dependency):
+
+    python3 tools/export_report_pdf.py path/to/case.json path/to/report.pdf
+
+The PDF is a view of the sealed case file, not the source of truth; it says
+so in its own footer. Whether PDF export belongs in the first complete
+Level 1 loop is still an open decision in
+[docs/preliminary-levels.md](docs/preliminary-levels.md) — this only makes
+the candidate presentation format available, it does not settle that
+question.
+
 Passing `--narrative-output path/to/narrative.json` writes an optional
 `case-narrative.v1` artifact beside the sealed case file. It is produced
 strictly after the case file is sealed, by a narration-only layer that cannot
