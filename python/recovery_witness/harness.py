@@ -229,12 +229,18 @@ def verify_case_file(case_file: Mapping[str, Any]) -> bool:
     return expected == seal(dict(payload))
 
 
-def validate_artifact_paths(*, path: Path, oracle_file: Path) -> None:
+def validate_artifact_paths(*, path: Path, oracle_file: Path, narrative_output: Path | None = None) -> None:
     """Reject an output path that would destroy the hidden oracle artifact."""
 
     if (path.resolve() == oracle_file.resolve() or
             (path.exists() and oracle_file.exists() and path.samefile(oracle_file))):
         raise ValueError("case output and oracle file must be different paths")
+    if narrative_output is None:
+        return
+    for other in (path, oracle_file):
+        if (narrative_output.resolve() == other.resolve() or
+                (narrative_output.exists() and other.exists() and narrative_output.samefile(other))):
+            raise ValueError("narrative output must differ from the case and oracle paths")
 
 
 def write_case_file(path: Path, case_file: Mapping[str, Any]) -> None:

@@ -16,6 +16,7 @@ from .harness import (
 )
 from .live import acquire
 from .investigator import InvestigationInput, investigate, validate_request
+from .narrator import narrate, null_narrator
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,6 +30,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--interactive", action="store_true", help="Request observations from a running bench")
     parser.add_argument("--query", action="store_true", help="Query the next simulated event before advancing")
+    parser.add_argument(
+        "--narrative-output",
+        type=Path,
+        help="Write a case-narrative.v1 artifact beside the sealed case file. "
+        "Uses the offline null narrator; it never alters the sealed case file.",
+    )
     return parser
 
 
@@ -56,9 +63,12 @@ def _capture(args, run_id, pending_oracle):
 def main() -> int:
     args = _parser().parse_args()
     validate_request(args.case_id, tuple(args.mechanic_observation))
-    validate_artifact_paths(path=args.output, oracle_file=args.oracle_file)
+    validate_artifact_paths(
+        path=args.output, oracle_file=args.oracle_file, narrative_output=args.narrative_output
+    )
     run_id = args.run_id if args.run_id is not None else uuid.uuid4().hex
-    for path in (args.output, args.oracle_file):
+    narrative_paths = (args.narrative_output,) if args.narrative_output is not None else ()
+    for path in (args.output, args.oracle_file, *narrative_paths):
         if os.path.lexists(path):
             raise FileExistsError(f"Artifact destination already exists: {path}")
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,8 +76,9 @@ def main() -> int:
           tempfile.TemporaryDirectory(dir=args.output.parent) as case_dir):
         pending = Path(oracle_dir) / "oracle.json"
         payload = _capture(args, run_id, pending)
+        sealed_case_file = build_case_file(payload)
         case = Path(case_dir) / "case.json"
-        write_case_file(case, build_case_file(payload))
+        write_case_file(case, sealed_case_file)
         os.link(pending, args.oracle_file)
         try:
             os.link(case, args.output)
@@ -75,6 +86,12 @@ def main() -> int:
             if pending.samefile(args.oracle_file):
                 args.oracle_file.unlink()
             raise
+    if args.narrative_output is not None:
+        # Narration runs strictly after the case file is sealed and published;
+        # it can never influence the sealed payload or its digest, and a
+        # narration failure here must not be allowed to undo the publication
+        # above.
+        write_case_file(args.narrative_output, narrate(sealed_case_file, null_narrator))
     print(json.dumps({"case_file": str(args.output), "run_id": run_id, "decision": payload["decision"]}))
     return 0
 

@@ -159,6 +159,14 @@ importing the producer package:
 
     python3 tools/verify_case.py path/to/case.json
 
+Passing `--narrative-output path/to/narrative.json` writes an optional
+`case-narrative.v1` artifact beside the sealed case file. It is produced
+strictly after the case file is sealed, by a narration-only layer that cannot
+alter the sealed payload or its digest; see
+[docs/investigator-agent-design.md](docs/investigator-agent-design.md). The
+current default narrator is a deterministic, offline template; no OpenAI
+backend is wired yet.
+
 ## Current evidence limits
 
 The host bench contains three fixed development scenarios. Replaying them tests
