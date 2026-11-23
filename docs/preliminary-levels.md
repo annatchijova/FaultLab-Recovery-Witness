@@ -293,7 +293,12 @@ vehicle evidence clearly.
 
 - ~~the exact Level 1 mechanic-facing case~~ — resolved, see
   [`docs/level1-case-schema.md`](level1-case-schema.md);
-- the common event and case-file schema;
+- the common event and case-file schema — audited against the live
+  `event.v1` implementation in
+  [`docs/common-evidence-contract-audit.md`](common-evidence-contract-audit.md);
+  three gaps (timestamp, correlation references, artifact reference) are
+  identified and deliberately deferred to Level 3, where QNX defines what
+  they need to mean;
 - the initial virtual-ECU and transport boundary;
 - C++17/QNX toolchain and adapter constraints;
 - the Python agent and frontend interface;
